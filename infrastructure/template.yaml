@@ -1,0 +1,485 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: TravelAI Agent — serverless stack (voice, chat, leads, booking)
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+  DomainName:
+    Type: String
+    Default: ""
+  OpenAiApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+  VapiApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+  VapiAssistantId:
+    Type: String
+    Default: ""
+  DuffelApiToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+  StripeSecretKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+  StripeWebhookSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+  RazorpayKeyId:
+    Type: String
+    Default: ""
+    NoEcho: true
+  RazorpayKeySecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+  WhatsappAccessToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+  WhatsappPhoneNumberId:
+    Type: String
+    Default: ""
+  TwilioAccountSid:
+    Type: String
+    Default: ""
+  TwilioAuthToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+  SmtpPassword:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: SMTP password for nurture emails
+
+Globals:
+  Function:
+    Timeout: 29
+    MemorySize: 1024
+    Architectures: [arm64]
+    Environment:
+      Variables:
+        APP_ENV: !Ref Environment
+        STORAGE_BACKEND: dynamo
+        LEADS_TABLE: !Ref LeadsTable
+        BOOKINGS_TABLE: !Ref BookingsTable
+        SESSIONS_TABLE: !Ref SessionsTable
+        CONVERSATIONS_TABLE: !Ref ConversationsTable
+        PRICE_ALERTS_TABLE: !Ref PriceAlertsTable
+        EVENTS_TABLE: !Ref EventsTable
+        REFERRALS_TABLE: !Ref ReferralsTable
+        ITINERARIES_TABLE: !Ref ItinerariesTable
+        RECORDINGS_BUCKET: !Ref RecordingsBucket
+        USER_POOL_ID: !Ref UserPool
+        USER_POOL_CLIENT_ID: !Ref UserPoolClient
+        OPENAI_API_KEY: !Ref OpenAiApiKey
+        VAPI_API_KEY: !Ref VapiApiKey
+        VAPI_ASSISTANT_ID: !Ref VapiAssistantId
+        DUFFEL_API_TOKEN: !Ref DuffelApiToken
+        STRIPE_SECRET_KEY: !Ref StripeSecretKey
+        STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
+        RAZORPAY_KEY_ID: !Ref RazorpayKeyId
+        RAZORPAY_KEY_SECRET: !Ref RazorpayKeySecret
+        WHATSAPP_ACCESS_TOKEN: !Ref WhatsappAccessToken
+        WHATSAPP_PHONE_NUMBER_ID: !Ref WhatsappPhoneNumberId
+        TWILIO_ACCOUNT_SID: !Ref TwilioAccountSid
+        TWILIO_AUTH_TOKEN: !Ref TwilioAuthToken
+        SMTP_HOST: smtp.gmail.com
+        SMTP_PORT: "587"
+        SMTP_USER: travel@travelai.com
+        SMTP_FROM: travel@travelai.com
+        SMTP_PASS: !Ref SmtpPassword
+        SITE_URL: !If
+          - HasDomain
+          - !Sub https://${DomainName}
+          - !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+
+Conditions:
+  HasDomain: !Not [!Equals [!Ref DomainName, ""]]
+
+Resources:
+  LeadsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub travel-ai-leads-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  BookingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub travel-ai-bookings-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  SessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub travel-ai-sessions-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  ConversationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub travel-ai-conversations-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  PriceAlertsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub travel-ai-price-alerts-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+
+  EventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub travel-ai-events-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  ReferralsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub travel-ai-referrals-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+
+  ItinerariesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub travel-ai-itineraries-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+
+  RecordingsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub travel-ai-recordings-${Environment}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldRecordings
+            Status: Enabled
+            ExpirationInDays: 90
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub travel-ai-admin-${Environment}
+      AutoVerifiedAttributes: [email]
+      UsernameAttributes: [email]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub travel-ai-dashboard-${Environment}
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+      PreventUserExistenceErrors: ENABLED
+
+  AdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: admin
+      UserPoolId: !Ref UserPool
+      Description: TravelAI admin dashboard access
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      CorsConfiguration:
+        AllowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+        AllowHeaders: ["Content-Type", "Authorization", "X-Session-Id", "X-Referral-Code"]
+        AllowOrigins: ["*"]
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub travel-ai-api-${Environment}
+      PackageType: Image
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LeadsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BookingsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConversationsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriceAlertsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ReferralsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItinerariesTable
+        - S3CrudPolicy:
+            BucketName: !Ref RecordingsBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
+      Events:
+        ApiProxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+        ApiRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /
+            Method: ANY
+    Metadata:
+      DockerTag: travel-ai-api
+      DockerContext: ../apps/api
+      Dockerfile: Dockerfile.lambda
+
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub travel-ai-worker-${Environment}
+      PackageType: Image
+      Timeout: 120
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LeadsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriceAlertsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
+      Events:
+        HotLeadsSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(2 minutes)
+            Description: Process hot leads and trigger AI callbacks
+            Enabled: true
+        PriceAlertsSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+            Description: Check flight price alerts
+            Enabled: true
+        NurtureEmailSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(30 minutes)
+            Description: Send abandoned search nurture emails
+            Enabled: true
+    Metadata:
+      DockerTag: travel-ai-worker
+      DockerContext: ../apps/api
+      Dockerfile: Dockerfile.worker
+
+Outputs:
+  ApiUrl:
+    Description: HTTP API endpoint
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+  LeadsTableName:
+    Value: !Ref LeadsTable
+  BookingsTableName:
+    Value: !Ref BookingsTable
+  SessionsTableName:
+    Value: !Ref SessionsTable
+  RecordingsBucketName:
+    Value: !Ref RecordingsBucket
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  DashboardUrl:
+    Description: Admin dashboard
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/dashboard

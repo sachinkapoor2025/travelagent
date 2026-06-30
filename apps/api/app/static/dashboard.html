@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TravelAI Agent Dashboard</title>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --text: #f1f5f9; --muted: #94a3b8; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header { padding: 1.5rem 2rem; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 1.25rem; }
+    header span { color: var(--muted); font-size: 0.875rem; }
+    main { padding: 2rem; max-width: 1200px; margin: 0 auto; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .card { background: var(--card); border-radius: 12px; padding: 1.25rem; border: 1px solid #334155; }
+    .card h3 { font-size: 0.75rem; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
+    .card .value { font-size: 2rem; font-weight: 700; color: var(--accent); }
+    section { margin-bottom: 2rem; }
+    section h2 { margin-bottom: 1rem; font-size: 1.1rem; }
+    table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
+    th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #334155; font-size: 0.875rem; }
+    th { color: var(--muted); font-weight: 500; }
+    .badge { padding: 0.2rem 0.5rem; border-radius: 999px; font-size: 0.75rem; background: #0ea5e920; color: #38bdf8; }
+    .badge.hot { background: #ef444420; color: #f87171; }
+    .badge.warm { background: #f59e0b20; color: #fbbf24; }
+    form { display: grid; gap: 0.75rem; max-width: 480px; }
+    input, select, button { padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: var(--text); }
+    button { background: var(--accent); color: #0f172a; border: none; font-weight: 600; cursor: pointer; }
+    button:hover { opacity: 0.9; }
+    .actions { display: flex; gap: 0.5rem; }
+    .actions button { padding: 0.3rem 0.6rem; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>✈️ TravelAI Agent</h1>
+    <span>UAE + India · Voice · WhatsApp · Chat · SMS · Leads · Hotels · Packages</span>
+  </header>
+  <main>
+    <div class="grid">
+      <div class="card"><h3>Total Leads</h3><div class="value" id="totalLeads">—</div></div>
+      <div class="card"><h3>Hot Leads</h3><div class="value" id="hotLeads">—</div></div>
+      <div class="card"><h3>Contact Rate</h3><div class="value" id="contactRate">—</div></div>
+      <div class="card"><h3>Chat Sessions</h3><div class="value" id="chatSessions">—</div></div>
+    </div>
+
+    <section>
+      <h2>Create Lead (triggers AI callback)</h2>
+      <form id="leadForm">
+        <input name="phone" placeholder="+971501234567 or +919876543210" required />
+        <input name="name" placeholder="Name" />
+        <input name="origin" placeholder="From (DXB)" />
+        <input name="destination" placeholder="To (MEL)" />
+        <input name="departure_date" type="date" />
+        <select name="market">
+          <option value="uae">UAE</option>
+          <option value="india">India</option>
+        </select>
+        <label><input type="checkbox" name="opt_in_voice" checked /> Opt-in for AI voice call</label>
+        <button type="submit">Create Lead & Call</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Leads Pipeline</h2>
+      <table>
+        <thead><tr><th>Phone</th><th>Route</th><th>Score</th><th>Status</th><th>Market</th><th>Actions</th></tr></thead>
+        <tbody id="leadsTable"></tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Web Chat Test (Sarah AI)</h2>
+      <div id="chatBox" style="background:var(--card);border-radius:12px;padding:1rem;max-width:480px;min-height:120px;margin-bottom:0.5rem;font-size:0.875rem"></div>
+      <form id="chatForm" style="display:flex;gap:0.5rem;max-width:480px">
+        <input name="message" placeholder="Ask about flights, hotels, packages..." style="flex:1" required />
+        <button type="submit">Send</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Price Alert</h2>
+      <form id="alertForm" style="grid-template-columns:1fr 1fr 1fr 1fr auto; display:grid; max-width:100%">
+        <input name="phone" placeholder="+971501234567" required />
+        <input name="origin" placeholder="DXB" value="DXB" />
+        <input name="destination" placeholder="BOM" value="BOM" />
+        <input name="target_price" type="number" placeholder="Target price" value="1500" />
+        <button type="submit">Set Alert</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Channel Breakdown</h2>
+      <pre id="channelStats" style="background:var(--card);padding:1rem;border-radius:12px;font-size:0.8rem"></pre>
+    </section>
+
+    <section>
+      <h2>Ad Intelligence</h2>
+      <form id="adForm" style="grid-template-columns:1fr 1fr 1fr auto; display:grid; max-width:100%">
+        <input name="origin" placeholder="DXB" value="DXB" />
+        <input name="destination" placeholder="MEL" value="MEL" />
+        <select name="market"><option value="uae">UAE</option><option value="india">India</option></select>
+        <button type="submit">Analyze Ads</button>
+      </form>
+      <pre id="adResults" style="margin-top:1rem;background:var(--card);padding:1rem;border-radius:12px;overflow:auto;font-size:0.8rem"></pre>
+    </section>
+  </main>
+  <script>
+    const API = '/api/v1';
+    let chatSessionId = null;
+
+    async function loadAnalytics() {
+      const res = await fetch(`${API}/analytics/dashboard`);
+      const stats = await res.json();
+      document.getElementById('contactRate').textContent = stats.contact_rate + '%';
+      document.getElementById('chatSessions').textContent = stats.chat_sessions_24h;
+      document.getElementById('channelStats').textContent = JSON.stringify(stats.channels, null, 2);
+    }
+
+    async function loadLeads() {
+      const res = await fetch(`${API}/leads`);
+      const leads = await res.json();
+      document.getElementById('totalLeads').textContent = leads.length;
+      document.getElementById('hotLeads').textContent = leads.filter(l => l.score >= 80).length;
+      const tbody = document.getElementById('leadsTable');
+      tbody.innerHTML = leads.map(l => `
+        <tr>
+          <td>${l.phone}</td>
+          <td>${l.origin || '—'} → ${l.destination || '—'}</td>
+          <td><span class="badge ${l.score >= 80 ? 'hot' : l.score >= 50 ? 'warm' : ''}">${l.score}</span></td>
+          <td>${l.status}</td>
+          <td>${l.market}</td>
+          <td class="actions">
+            <button onclick="callLead('${l.id}')">Call</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function callLead(id) {
+      const res = await fetch(`${API}/leads/${id}/call`, { method: 'POST' });
+      const data = await res.json();
+      alert(res.ok ? `Call initiated: ${JSON.stringify(data)}` : data.detail);
+    }
+
+    document.getElementById('leadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = {
+        phone: fd.get('phone'),
+        name: fd.get('name') || null,
+        origin: fd.get('origin') || null,
+        destination: fd.get('destination') || null,
+        departure_date: fd.get('departure_date') || null,
+        market: fd.get('market'),
+        opt_in_voice: fd.get('opt_in_voice') === 'on',
+        source: 'website',
+      };
+      const res = await fetch(`${API}/leads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) { loadLeads(); e.target.reset(); alert('Lead created — AI callback scheduled'); }
+      else alert((await res.json()).detail);
+    });
+
+    document.getElementById('adForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const res = await fetch(`${API}/ads/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          origin: fd.get('origin'),
+          destination: fd.get('destination'),
+          market: fd.get('market'),
+        }),
+      });
+      const data = await res.json();
+      document.getElementById('adResults').textContent = JSON.stringify(data, null, 2);
+    });
+
+    document.getElementById('chatForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const res = await fetch(`${API}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: fd.get('message'), session_id: chatSessionId }),
+      });
+      const data = await res.json();
+      chatSessionId = data.session_id;
+      const box = document.getElementById('chatBox');
+      box.innerHTML += `<div><strong>You:</strong> ${fd.get('message')}</div><div style="color:var(--accent)"><strong>Sarah:</strong> ${data.reply}</div><hr style="border-color:#334155;margin:0.5rem 0">`;
+      e.target.reset();
+    });
+
+    document.getElementById('alertForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const res = await fetch(`${API}/price-alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: fd.get('phone'),
+          origin: fd.get('origin'),
+          destination: fd.get('destination'),
+          departure_date: '2026-08-01',
+          target_price: parseFloat(fd.get('target_price')),
+          market: 'uae',
+        }),
+      });
+      alert(res.ok ? 'Price alert created!' : (await res.json()).detail);
+    });
+
+    loadLeads();
+    loadAnalytics();
+    setInterval(loadLeads, 15000);
+    setInterval(loadAnalytics, 30000);
+  </script>
+</body>
+</html>
