@@ -99,6 +99,20 @@ GitHub secrets needed (see `.github/workflows/deploy.yml`):
 
 Push to `main` → CI tests → SAM deploy to `me-central-1`.
 
+## GitHub Actions — AWS credentials fix
+
+If deploy fails with **"The security token included in the request is invalid"**:
+
+1. **Use permanent IAM keys only** — access key must start with `AKIA` (not `ASIA`).
+2. In GitHub → **Settings → Secrets and variables → Actions**, set exactly:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+3. **Do not set** `AWS_SESSION_TOKEN` unless you use temporary/SSO keys (`ASIA...`).
+4. If `AWS_SESSION_TOKEN` exists as an org-level secret, delete it or override it for this repo.
+5. Re-create IAM access keys if they were rotated or deactivated in AWS Console.
+
+The updated `deploy.yml` clears stale session tokens and runs `aws sts get-caller-identity` before SAM deploy.
+
 ## Project Structure
 
 ```
