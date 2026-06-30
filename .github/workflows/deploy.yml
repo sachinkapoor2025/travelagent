@@ -9,6 +9,9 @@ on:
 
 env:
   AWS_REGION: me-central-1
+  AWS_DEFAULT_REGION: me-central-1
+  # Prevent org/repo Variables from injecting a stale session token with permanent keys
+  AWS_SESSION_TOKEN: ""
 
 jobs:
   test:
@@ -58,31 +61,49 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Permanent IAM keys (AKIA...) must NOT send a session token.
-      # Clear any org/repo-level AWS_SESSION_TOKEN that causes "invalid security token".
-      - name: Clear stale session token
+      # Do NOT use aws-actions/configure-aws-credentials — it fails when a stale
+      # AWS_SESSION_TOKEN exists at org/repo level. Set permanent keys directly.
+      - name: Setup AWS credentials
+        shell: bash
+        env:
+          SECRET_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          SECRET_SESSION: ${{ secrets.AWS_SESSION_TOKEN }}
         run: |
-          echo "AWS_ACCESS_KEY_ID prefix: ${AWS_ACCESS_KEY_ID:0:4}***"
-          if [[ "${AWS_ACCESS_KEY_ID}" == ASIA* ]]; then
-            echo "::error::AWS_ACCESS_KEY_ID starts with ASIA — that is a temporary key and requires AWS_SESSION_TOKEN."
-            exit 1
-          fi
-          if [[ -z "${AWS_ACCESS_KEY_ID}" || -z "${AWS_SECRET_ACCESS_KEY}" ]]; then
-            echo "::error::Set GitHub secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (Repository → Settings → Secrets)."
-            exit 1
-          fi
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          set -euo pipefail
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-        env:
-          AWS_SESSION_TOKEN: ""
+          unset AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+          export AWS_SESSION_TOKEN=""
+          export AWS_SECURITY_TOKEN=""
+
+          KEY_ID="$(printf '%s' "${SECRET_KEY_ID}" | tr -d '[:space:]')"
+          ACCESS_KEY="$(printf '%s' "${SECRET_ACCESS_KEY}" | tr -d '[:space:]')"
+          SESSION="$(printf '%s' "${SECRET_SESSION}" | tr -d '[:space:]')"
+
+          if [[ -z "${KEY_ID}" || -z "${ACCESS_KEY}" ]]; then
+            echo "::error::GitHub secrets missing. Add exactly:"
+            echo "  AWS_ACCESS_KEY_ID"
+            echo "  AWS_SECRET_ACCESS_KEY"
+            echo "Repo → Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+
+          echo "Access key prefix: ${KEY_ID:0:4}*** (length ${#KEY_ID})"
+
+          if [[ "${KEY_ID}" == ASIA* ]]; then
+            if [[ -z "${SESSION}" ]]; then
+              echo "::error::Temporary AWS key (ASIA*) detected — also set AWS_SESSION_TOKEN secret."
+              exit 1
+            fi
+            echo "AWS_SESSION_TOKEN=${SESSION}" >> "$GITHUB_ENV"
+          fi
+
+          {
+            echo "AWS_ACCESS_KEY_ID=${KEY_ID}"
+            echo "AWS_SECRET_ACCESS_KEY=${ACCESS_KEY}"
+            echo "AWS_DEFAULT_REGION=${AWS_REGION}"
+            echo "AWS_REGION=${AWS_REGION}"
+          } >> "$GITHUB_ENV"
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
