@@ -11,7 +11,7 @@ settings = get_settings()
 
 
 async def process_hot_leads() -> dict:
-    leads = await lead_repo.get_hot_leads(None, limit=10)
+    leads = await lead_repo.get_hot_leads(limit=10)
     processed = 0
 
     for lead in leads:
@@ -32,7 +32,7 @@ async def process_hot_leads() -> dict:
             },
         )
         if result.get("success"):
-            await lead_repo.update_status(None, lead["id"], "contacted")
+            await lead_repo.update_status(lead["id"], "contacted")
             processed += 1
 
     return {"processed": processed, "total_hot": len(leads)}

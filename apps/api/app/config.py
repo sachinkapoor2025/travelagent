@@ -1,4 +1,4 @@
-"""Application configuration."""
+"""Application configuration — DynamoDB-only (pay-per-request, no Postgres/RDS)."""
 
 from functools import lru_cache
 from typing import Literal
@@ -16,10 +16,6 @@ class Settings(BaseSettings):
     api_port: int = 8000
     secret_key: str = "change-me-in-production"
     allowed_origins: str = "http://localhost:3000,http://localhost:8000"
-
-    database_url: str = "postgresql+asyncpg://travel:travel@localhost:5432/travel_ai"
-    database_url_sync: str = "postgresql://travel:travel@localhost:5432/travel_ai"
-    redis_url: str = "redis://localhost:6379/0"
 
     openai_api_key: str = ""
 
@@ -62,19 +58,19 @@ class Settings(BaseSettings):
     serpapi_key: str = ""
 
     aws_region: str = "me-central-1"
-    aws_s3_bucket: str = "travel-ai-recordings"
-    aws_access_key_id: str = ""
-    aws_secret_access_key: str = ""
+    aws_access_key_id: str = "local"
+    aws_secret_access_key: str = "local"
+    dynamodb_endpoint: str = ""  # http://localhost:8001 for local DynamoDB
 
-    storage_backend: Literal["postgres", "dynamo"] = "postgres"
-    leads_table: str = ""
-    bookings_table: str = ""
-    sessions_table: str = ""
-    conversations_table: str = ""
-    price_alerts_table: str = ""
-    events_table: str = ""
-    referrals_table: str = ""
-    itineraries_table: str = ""
+    storage_backend: Literal["dynamo"] = "dynamo"
+    leads_table: str = "travel-ai-leads-dev"
+    bookings_table: str = "travel-ai-bookings-dev"
+    sessions_table: str = "travel-ai-sessions-dev"
+    conversations_table: str = "travel-ai-conversations-dev"
+    price_alerts_table: str = "travel-ai-price-alerts-dev"
+    events_table: str = "travel-ai-events-dev"
+    referrals_table: str = "travel-ai-referrals-dev"
+    itineraries_table: str = "travel-ai-itineraries-dev"
     recordings_bucket: str = ""
 
     smtp_host: str = "smtp.gmail.com"
@@ -110,7 +106,7 @@ class Settings(BaseSettings):
 
     @property
     def use_dynamo(self) -> bool:
-        return self.storage_backend == "dynamo" and bool(self.leads_table)
+        return True
 
 
 @lru_cache

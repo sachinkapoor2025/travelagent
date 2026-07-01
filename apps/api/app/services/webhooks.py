@@ -31,7 +31,7 @@ async def ingest_meta_lead(payload: dict[str, Any]) -> dict[str, Any]:
         "opt_in_marketing": True,
     }
 
-    lead = await lead_repo.create_or_update(None, data)
+    lead = await lead_repo.create_or_update(data)
     return {"status": "created", "lead": lead}
 
 
@@ -56,5 +56,5 @@ async def ingest_google_lead(payload: dict[str, Any]) -> dict[str, Any]:
         "opt_in_marketing": True,
     }
 
-    lead = await lead_repo.create_or_update(None, data)
+    lead = await lead_repo.create_or_update(data)
     return {"status": "created", "lead": lead}

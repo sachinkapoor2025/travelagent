@@ -1,13 +1,12 @@
-"""Stripe and Razorpay payment integrations."""
+"""Stripe and Razorpay payment integrations — DynamoDB."""
 
-from typing import Optional
-from uuid import UUID
+from typing import Any, Optional
 
 import stripe
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models import Booking, Market, Payment, PaymentProvider, PaymentStatus
+from app.models import Market, PaymentProvider, PaymentStatus
+from app.storage.bookings_repo import booking_repo
 
 settings = get_settings()
 
@@ -17,26 +16,26 @@ def _currency_for_market(market: Market) -> str:
 
 
 async def create_payment_link(
-    db: AsyncSession,
-    booking: Booking,
+    booking: dict[str, Any],
     market: Market,
     customer_phone: Optional[str] = None,
-) -> Payment:
+) -> dict[str, Any]:
     currency = _currency_for_market(market)
-    amount = booking.total_amount
+    amount = float(booking["total_amount"])
+    booking_id = booking["id"]
 
     if market == Market.INDIA and settings.razorpay_key_id:
-        return await _create_razorpay_link(db, booking, amount, currency, customer_phone)
-    return await _create_stripe_link(db, booking, amount, currency, customer_phone)
+        return await _create_razorpay_link(booking_id, booking, amount, currency, customer_phone)
+    return await _create_stripe_link(booking_id, booking, amount, currency, customer_phone)
 
 
 async def _create_stripe_link(
-    db: AsyncSession,
-    booking: Booking,
+    booking_id: str,
+    booking: dict[str, Any],
     amount: float,
     currency: str,
     customer_phone: Optional[str],
-) -> Payment:
+) -> dict[str, Any]:
     if settings.stripe_secret_key:
         stripe.api_key = settings.stripe_secret_key
         minor_units = int(amount * 100) if currency != "JPY" else int(amount)
@@ -48,47 +47,45 @@ async def _create_stripe_link(
                     "price_data": {
                         "currency": currency.lower(),
                         "product_data": {
-                            "name": f"Flight {booking.origin} → {booking.destination}",
-                            "description": f"Travel booking ref {booking.id}",
+                            "name": f"Flight {booking['origin']} → {booking['destination']}",
+                            "description": f"Travel booking ref {booking_id}",
                         },
                         "unit_amount": minor_units,
                     },
                     "quantity": 1,
                 }
             ],
-            success_url=f"https://your-domain.com/booking/{booking.id}/success",
-            cancel_url=f"https://your-domain.com/booking/{booking.id}/cancel",
-            metadata={"booking_id": str(booking.id)},
-            phone_number_collection={"enabled": True} if customer_phone else None,
+            success_url=f"{settings.site_url}/booking/{booking_id}/success",
+            cancel_url=f"{settings.site_url}/booking/{booking_id}/cancel",
+            metadata={"booking_id": booking_id},
         )
         link_url = session.url or ""
         external_id = session.id
     else:
-        link_url = f"https://checkout.stripe.com/mock/{booking.id}"
-        external_id = f"mock_stripe_{booking.id}"
+        link_url = f"https://checkout.stripe.com/mock/{booking_id}"
+        external_id = f"mock_stripe_{booking_id}"
 
-    payment = Payment(
-        booking_id=booking.id,
-        provider=PaymentProvider.STRIPE,
-        external_payment_id=external_id,
-        payment_link_url=link_url,
-        amount=amount,
-        currency=currency,
-        status=PaymentStatus.PENDING,
-        metadata_json={"supports": ["visa", "mastercard", "amex", "apple_pay", "google_pay"]},
+    return await booking_repo.create_payment(
+        booking_id,
+        {
+            "provider": PaymentProvider.STRIPE.value,
+            "external_payment_id": external_id,
+            "payment_link_url": link_url,
+            "amount": amount,
+            "currency": currency,
+            "status": PaymentStatus.PENDING.value,
+            "metadata_json": {"supports": ["visa", "mastercard", "amex", "apple_pay", "google_pay"]},
+        },
     )
-    db.add(payment)
-    await db.flush()
-    return payment
 
 
 async def _create_razorpay_link(
-    db: AsyncSession,
-    booking: Booking,
+    booking_id: str,
+    booking: dict[str, Any],
     amount: float,
     currency: str,
     customer_phone: Optional[str],
-) -> Payment:
+) -> dict[str, Any]:
     if settings.razorpay_key_id and settings.razorpay_key_secret:
         import razorpay
 
@@ -97,38 +94,27 @@ async def _create_razorpay_link(
             {
                 "amount": int(amount * 100),
                 "currency": currency,
-                "description": f"Flight {booking.origin} to {booking.destination}",
+                "description": f"Flight {booking['origin']} to {booking['destination']}",
                 "customer": {"contact": customer_phone or "+919999999999"},
                 "notify": {"sms": True, "email": False},
-                "notes": {"booking_id": str(booking.id)},
+                "notes": {"booking_id": booking_id},
             }
         )
         link_url = payment_link["short_url"]
         external_id = payment_link["id"]
     else:
-        link_url = f"https://razorpay.com/mock/{booking.id}"
-        external_id = f"mock_razorpay_{booking.id}"
+        link_url = f"https://razorpay.com/mock/{booking_id}"
+        external_id = f"mock_razorpay_{booking_id}"
 
-    payment = Payment(
-        booking_id=booking.id,
-        provider=PaymentProvider.RAZORPAY,
-        external_payment_id=external_id,
-        payment_link_url=link_url,
-        amount=amount,
-        currency=currency,
-        status=PaymentStatus.PENDING,
-        metadata_json={"supports": ["visa", "mastercard", "rupay", "upi", "netbanking"]},
+    return await booking_repo.create_payment(
+        booking_id,
+        {
+            "provider": PaymentProvider.RAZORPAY.value,
+            "external_payment_id": external_id,
+            "payment_link_url": link_url,
+            "amount": amount,
+            "currency": currency,
+            "status": PaymentStatus.PENDING.value,
+            "metadata_json": {"supports": ["visa", "mastercard", "rupay", "upi", "netbanking"]},
+        },
     )
-    db.add(payment)
-    await db.flush()
-    return payment
-
-
-async def handle_stripe_webhook(payload: dict) -> Optional[UUID]:
-    event_type = payload.get("type")
-    if event_type == "checkout.session.completed":
-        metadata = payload.get("data", {}).get("object", {}).get("metadata", {})
-        booking_id = metadata.get("booking_id")
-        if booking_id:
-            return UUID(booking_id)
-    return None

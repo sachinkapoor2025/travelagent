@@ -1,20 +1,16 @@
-"""Ad intelligence and campaign generation."""
+"""Ad intelligence — DynamoDB."""
 
-from uuid import UUID
+from fastapi import APIRouter
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.database import get_db
-from app.models import AdCampaign, Market
 from app.schemas import AdAnalysisRequest, AdAnalysisResponse
 from app.services.ad_intelligence import ad_intelligence
+from app.storage.bookings_repo import booking_repo
 
 router = APIRouter(prefix="/ads", tags=["ads"])
 
 
 @router.post("/analyze", response_model=AdAnalysisResponse)
-async def analyze_ads(payload: AdAnalysisRequest, db: AsyncSession = Depends(get_db)) -> AdAnalysisResponse:
+async def analyze_ads(payload: AdAnalysisRequest) -> AdAnalysisResponse:
     result = await ad_intelligence.analyze_route(
         payload.origin.upper(),
         payload.destination.upper(),
@@ -22,37 +18,33 @@ async def analyze_ads(payload: AdAnalysisRequest, db: AsyncSession = Depends(get
         payload.platform,
     )
 
-    campaign = AdCampaign(
-        name=f"{payload.origin}-{payload.destination} {payload.platform}",
-        route_origin=payload.origin.upper(),
-        route_destination=payload.destination.upper(),
-        market=payload.market,
-        platform=payload.platform,
-        status="analyzed",
-        competitor_analysis={"insights": result.competitor_insights, "patterns": result.winning_patterns},
-        generated_ads=[v.model_dump() for v in result.ad_variants],
+    await booking_repo.save_campaign(
+        {
+            "name": f"{payload.origin}-{payload.destination} {payload.platform}",
+            "route_origin": payload.origin.upper(),
+            "route_destination": payload.destination.upper(),
+            "market": payload.market.value,
+            "platform": payload.platform,
+            "status": "analyzed",
+            "competitor_analysis": {"insights": result.competitor_insights, "patterns": result.winning_patterns},
+            "generated_ads": [v.model_dump() for v in result.ad_variants],
+        }
     )
-    db.add(campaign)
-    await db.flush()
-
     return result
 
 
 @router.get("/campaigns")
-async def list_campaigns(db: AsyncSession = Depends(get_db)) -> list[dict]:
-    from sqlalchemy import select
-
-    result = await db.execute(select(AdCampaign).order_by(AdCampaign.created_at.desc()).limit(20))
-    campaigns = result.scalars().all()
+async def list_campaigns() -> list[dict]:
+    campaigns = await booking_repo.list_campaigns()
     return [
         {
-            "id": str(c.id),
-            "name": c.name,
-            "route": f"{c.route_origin}-{c.route_destination}",
-            "market": c.market.value,
-            "platform": c.platform,
-            "status": c.status,
-            "top_ad": c.generated_ads[0] if c.generated_ads else None,
+            "id": c.get("id"),
+            "name": c.get("name"),
+            "route": f"{c.get('route_origin')}-{c.get('route_destination')}",
+            "market": c.get("market"),
+            "platform": c.get("platform"),
+            "status": c.get("status"),
+            "top_ad": c.get("generated_ads", [None])[0] if c.get("generated_ads") else None,
         }
         for c in campaigns
     ]

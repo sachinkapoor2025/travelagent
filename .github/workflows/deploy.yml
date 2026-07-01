@@ -10,31 +10,10 @@ on:
 env:
   AWS_REGION: me-central-1
   AWS_DEFAULT_REGION: me-central-1
-  # Prevent org/repo Variables from injecting a stale session token with permanent keys
-  AWS_SESSION_TOKEN: ""
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: travel
-          POSTGRES_PASSWORD: travel
-          POSTGRES_DB: travel_ai
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-
     steps:
       - uses: actions/checkout@v4
 
@@ -48,9 +27,15 @@ jobs:
       - name: Import check
         working-directory: apps/api
         env:
-          DATABASE_URL: postgresql+asyncpg://travel:travel@localhost:5432/travel_ai
-          DATABASE_URL_SYNC: postgresql://travel:travel@localhost:5432/travel_ai
-          REDIS_URL: redis://localhost:6379/0
+          STORAGE_BACKEND: dynamo
+          LEADS_TABLE: travel-ai-leads-dev
+          BOOKINGS_TABLE: travel-ai-bookings-dev
+          SESSIONS_TABLE: travel-ai-sessions-dev
+          EVENTS_TABLE: travel-ai-events-dev
+          PRICE_ALERTS_TABLE: travel-ai-price-alerts-dev
+          REFERRALS_TABLE: travel-ai-referrals-dev
+          ITINERARIES_TABLE: travel-ai-itineraries-dev
+          CONVERSATIONS_TABLE: travel-ai-conversations-dev
         run: python -c "from app.main import app; print('OK', app.title)"
 
   deploy:
@@ -61,49 +46,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Do NOT use aws-actions/configure-aws-credentials — it fails when a stale
-      # AWS_SESSION_TOKEN exists at org/repo level. Set permanent keys directly.
       - name: Setup AWS credentials
         shell: bash
         env:
-          SECRET_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          SECRET_SESSION: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
-
-          unset AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
-          export AWS_SESSION_TOKEN=""
-          export AWS_SECURITY_TOKEN=""
-
-          KEY_ID="$(printf '%s' "${SECRET_KEY_ID}" | tr -d '[:space:]')"
-          ACCESS_KEY="$(printf '%s' "${SECRET_ACCESS_KEY}" | tr -d '[:space:]')"
-          SESSION="$(printf '%s' "${SECRET_SESSION}" | tr -d '[:space:]')"
-
-          if [[ -z "${KEY_ID}" || -z "${ACCESS_KEY}" ]]; then
-            echo "::error::GitHub secrets missing. Add exactly:"
-            echo "  AWS_ACCESS_KEY_ID"
-            echo "  AWS_SECRET_ACCESS_KEY"
-            echo "Repo → Settings → Secrets and variables → Actions → New repository secret"
+          if [[ -z "${AWS_ACCESS_KEY_ID}" || -z "${AWS_SECRET_ACCESS_KEY}" ]]; then
+            echo "::error::Add GitHub secrets: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
             exit 1
           fi
-
-          echo "Access key prefix: ${KEY_ID:0:4}*** (length ${#KEY_ID})"
-
-          if [[ "${KEY_ID}" == ASIA* ]]; then
-            if [[ -z "${SESSION}" ]]; then
-              echo "::error::Temporary AWS key (ASIA*) detected — also set AWS_SESSION_TOKEN secret."
-              exit 1
-            fi
-            echo "AWS_SESSION_TOKEN=${SESSION}" >> "$GITHUB_ENV"
-          fi
-
-          {
-            echo "AWS_ACCESS_KEY_ID=${KEY_ID}"
-            echo "AWS_SECRET_ACCESS_KEY=${ACCESS_KEY}"
-            echo "AWS_DEFAULT_REGION=${AWS_REGION}"
-            echo "AWS_REGION=${AWS_REGION}"
-          } >> "$GITHUB_ENV"
+          echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> "$GITHUB_ENV"
+          echo "AWS_DEFAULT_REGION=${AWS_REGION}" >> "$GITHUB_ENV"
+          echo "AWS_REGION=${AWS_REGION}" >> "$GITHUB_ENV"
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity

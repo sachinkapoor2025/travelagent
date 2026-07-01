@@ -7,25 +7,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: travel
-          POSTGRES_PASSWORD: travel
-          POSTGRES_DB: travel_ai
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-
     steps:
       - uses: actions/checkout@v4
 
@@ -36,10 +17,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r apps/api/requirements.txt
 
-      - name: Lint import check
+      - name: Import check
         working-directory: apps/api
         env:
-          DATABASE_URL: postgresql+asyncpg://travel:travel@localhost:5432/travel_ai
-          DATABASE_URL_SYNC: postgresql://travel:travel@localhost:5432/travel_ai
-          REDIS_URL: redis://localhost:6379/0
+          STORAGE_BACKEND: dynamo
+          LEADS_TABLE: travel-ai-leads-dev
+          BOOKINGS_TABLE: travel-ai-bookings-dev
+          SESSIONS_TABLE: travel-ai-sessions-dev
+          EVENTS_TABLE: travel-ai-events-dev
+          PRICE_ALERTS_TABLE: travel-ai-price-alerts-dev
+          REFERRALS_TABLE: travel-ai-referrals-dev
+          ITINERARIES_TABLE: travel-ai-itineraries-dev
+          CONVERSATIONS_TABLE: travel-ai-conversations-dev
         run: python -c "from app.main import app; print('OK', app.title)"

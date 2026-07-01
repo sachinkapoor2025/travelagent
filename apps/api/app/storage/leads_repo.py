@@ -1,48 +1,19 @@
-"""Lead repository — Postgres locally, DynamoDB on AWS SAM."""
+"""Lead + DNC repository — DynamoDB only."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.config import get_settings
-from app.models import Lead, LeadSource, LeadStatus, Market
-from app.services.leads import calculate_lead_score, classify_lead
+from app.models import LeadSource, LeadStatus, Market
+from app.services.leads import calculate_lead_score
 from app.storage.dynamo import leads_store, now_iso
 
 settings = get_settings()
 
 
-def _lead_to_dict(lead: Lead) -> dict[str, Any]:
-    return {
-        "id": str(lead.id),
-        "phone": lead.phone,
-        "email": lead.email,
-        "name": lead.name,
-        "market": lead.market.value if lead.market else "uae",
-        "source": lead.source.value if lead.source else "website",
-        "status": lead.status.value if lead.status else "new",
-        "score": lead.score,
-        "preferred_language": lead.preferred_language.value if lead.preferred_language else None,
-        "origin": lead.origin,
-        "destination": lead.destination,
-        "departure_date": lead.departure_date,
-        "return_date": lead.return_date,
-        "passengers": lead.passengers,
-        "cabin_class": lead.cabin_class,
-        "budget_max": lead.budget_max,
-        "stop_preference": lead.stop_preference,
-        "opt_in_marketing": lead.opt_in_marketing,
-        "opt_in_voice": lead.opt_in_voice,
-        "created_at": lead.created_at.isoformat() if lead.created_at else now_iso(),
-    }
-
-
-def _dict_to_lead_response(data: dict[str, Any]) -> dict[str, Any]:
+def _dict_to_lead(data: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": data.get("id", data.get("lead_id")),
         "phone": data["phone"],
@@ -61,51 +32,14 @@ def _dict_to_lead_response(data: dict[str, Any]) -> dict[str, Any]:
         "cabin_class": data.get("cabin_class"),
         "budget_max": data.get("budget_max"),
         "stop_preference": data.get("stop_preference"),
+        "opt_in_marketing": data.get("opt_in_marketing", False),
+        "opt_in_voice": data.get("opt_in_voice", False),
         "created_at": data.get("created_at", now_iso()),
     }
 
 
 class LeadRepository:
-    async def create_or_update(self, db: Optional[AsyncSession], data: dict[str, Any]) -> dict[str, Any]:
-        if settings.use_dynamo:
-            return self._create_or_update_dynamo(data)
-        assert db
-        lead = await self._create_or_update_sql(db, data)
-        return _lead_to_dict(lead)
-
-    async def list_leads(self, db: Optional[AsyncSession], limit: int = 50) -> list[dict[str, Any]]:
-        if settings.use_dynamo:
-            store = leads_store()
-            items = store.query_gsi1("LEADS", limit=limit)
-            return [_dict_to_lead_response(i) for i in items]
-        assert db
-        result = await db.execute(select(Lead).order_by(Lead.score.desc()).limit(limit))
-        return [_lead_to_dict(l) for l in result.scalars().all()]
-
-    async def get_by_id(self, db: Optional[AsyncSession], lead_id: str) -> Optional[dict[str, Any]]:
-        if settings.use_dynamo:
-            item = leads_store().get(f"LEAD#{lead_id}", "METADATA")
-            return _dict_to_lead_response(item) if item else None
-        assert db
-        lead = await db.get(Lead, uuid.UUID(lead_id))
-        return _lead_to_dict(lead) if lead else None
-
-    async def get_hot_leads(self, db: Optional[AsyncSession], limit: int = 10) -> list[dict[str, Any]]:
-        leads = await self.list_leads(db, limit=100)
-        hot = [l for l in leads if l["score"] >= settings.lead_warm_score_threshold]
-        hot.sort(key=lambda x: x["score"], reverse=True)
-        return hot[:limit]
-
-    async def update_status(self, db: Optional[AsyncSession], lead_id: str, status: str) -> None:
-        if settings.use_dynamo:
-            leads_store().update(f"LEAD#{lead_id}", "METADATA", {"status": status, "updated_at": now_iso()})
-            return
-        assert db
-        lead = await db.get(Lead, uuid.UUID(lead_id))
-        if lead:
-            lead.status = LeadStatus(status)
-
-    def _create_or_update_dynamo(self, data: dict[str, Any]) -> dict[str, Any]:
+    async def create_or_update(self, data: dict[str, Any]) -> dict[str, Any]:
         store = leads_store()
         phone = data["phone"]
         existing = store.query_gsi1(f"PHONE#{phone}", limit=1)
@@ -136,32 +70,57 @@ class LeadRepository:
         if not existing:
             record["created_at"] = ts
 
-        score = self._score_from_dict(record)
-        record["score"] = score
-        if score >= settings.lead_hot_score_threshold:
-            record["status"] = "qualified"
+        record["score"] = _score_from_dict(record)
+        if record["score"] >= settings.lead_hot_score_threshold:
+            record["status"] = LeadStatus.QUALIFIED.value
 
-        store.put(f"LEAD#{lead_id}", "METADATA", record, gsi1pk="LEADS", gsi1sk=f"{score:03d}#{ts}")
+        store.put(f"LEAD#{lead_id}", "METADATA", record, gsi1pk="LEADS", gsi1sk=f"{record['score']:03d}#{ts}")
         store.put(f"LEAD#{lead_id}", "METADATA", record, gsi1pk=f"PHONE#{phone}", gsi1sk=lead_id)
-        return _dict_to_lead_response(record)
+        return _dict_to_lead(record)
 
-    async def _create_or_update_sql(self, db: AsyncSession, data: dict[str, Any]) -> Lead:
-        from app.services.leads import create_or_update_lead
+    async def list_leads(self, status: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
+        items = leads_store().query_gsi1("LEADS", limit=limit)
+        leads = [_dict_to_lead(i) for i in items]
+        if status:
+            leads = [l for l in leads if l["status"] == status]
+        return leads
 
-        return await create_or_update_lead(db, data)
+    async def get_by_id(self, lead_id: str) -> Optional[dict[str, Any]]:
+        item = leads_store().get(f"LEAD#{lead_id}", "METADATA")
+        return _dict_to_lead(item) if item else None
 
-    def _score_from_dict(self, data: dict[str, Any]) -> int:
-        class FakeLead:
-            pass
+    async def get_hot_leads(self, limit: int = 10) -> list[dict[str, Any]]:
+        leads = await self.list_leads(limit=100)
+        hot = [l for l in leads if l["score"] >= settings.lead_warm_score_threshold]
+        hot.sort(key=lambda x: x["score"], reverse=True)
+        return hot[:limit]
 
-        lead = FakeLead()
-        for k, v in data.items():
-            setattr(lead, k, v)
-        lead.market = Market(data.get("market", "uae"))
-        lead.source = LeadSource(data.get("source", "website"))
-        lead.opt_in_voice = data.get("opt_in_voice", False)
-        lead.passengers = int(data.get("passengers", 1))
-        return calculate_lead_score(lead)  # type: ignore[arg-type]
+    async def update_status(self, lead_id: str, status: str) -> None:
+        leads_store().update(f"LEAD#{lead_id}", "METADATA", {"status": status, "updated_at": now_iso()})
+
+    async def is_on_dnc(self, phone: str) -> bool:
+        return leads_store().get(f"DNC#{phone}", "METADATA") is not None
+
+    async def add_to_dnc(self, phone: str, market: str, reason: str = "Customer request") -> None:
+        leads_store().put(
+            f"DNC#{phone}",
+            "METADATA",
+            {"phone": phone, "market": market, "reason": reason, "created_at": now_iso()},
+        )
+
+
+def _score_from_dict(data: dict[str, Any]) -> int:
+    class FakeLead:
+        pass
+
+    lead = FakeLead()
+    for k, v in data.items():
+        setattr(lead, k, v)
+    lead.market = Market(data.get("market", "uae"))
+    lead.source = LeadSource(data.get("source", "website"))
+    lead.opt_in_voice = data.get("opt_in_voice", False)
+    lead.passengers = int(data.get("passengers", 1))
+    return calculate_lead_score(lead)  # type: ignore[arg-type]
 
 
 lead_repo = LeadRepository()

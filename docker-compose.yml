@@ -1,4 +1,26 @@
 services:
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    ports:
+      - "8001:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
+
+  init-dynamo:
+    image: python:3.12-slim
+    volumes:
+      - ./scripts:/scripts
+      - ./apps/api:/app
+    working_dir: /app
+    environment:
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: me-central-1
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+    command: >
+      bash -c "pip install -q boto3 && python /scripts/init_dynamo_local.py"
+    depends_on:
+      - dynamodb
+
   api:
     build:
       context: .
@@ -8,14 +30,22 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://travel:travel@postgres:5432/travel_ai
-      DATABASE_URL_SYNC: postgresql://travel:travel@postgres:5432/travel_ai
-      REDIS_URL: redis://redis:6379/0
+      STORAGE_BACKEND: dynamo
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: me-central-1
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      LEADS_TABLE: travel-ai-leads-dev
+      BOOKINGS_TABLE: travel-ai-bookings-dev
+      SESSIONS_TABLE: travel-ai-sessions-dev
+      CONVERSATIONS_TABLE: travel-ai-conversations-dev
+      PRICE_ALERTS_TABLE: travel-ai-price-alerts-dev
+      EVENTS_TABLE: travel-ai-events-dev
+      REFERRALS_TABLE: travel-ai-referrals-dev
+      ITINERARIES_TABLE: travel-ai-itineraries-dev
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      init-dynamo:
+        condition: service_completed_successfully
     volumes:
       - ./apps/api:/app/apps/api
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -27,41 +57,20 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://travel:travel@postgres:5432/travel_ai
-      DATABASE_URL_SYNC: postgresql://travel:travel@postgres:5432/travel_ai
-      REDIS_URL: redis://redis:6379/0
+      STORAGE_BACKEND: dynamo
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: me-central-1
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      LEADS_TABLE: travel-ai-leads-dev
+      BOOKINGS_TABLE: travel-ai-bookings-dev
+      SESSIONS_TABLE: travel-ai-sessions-dev
+      EVENTS_TABLE: travel-ai-events-dev
+      PRICE_ALERTS_TABLE: travel-ai-price-alerts-dev
+      REFERRALS_TABLE: travel-ai-referrals-dev
+      ITINERARIES_TABLE: travel-ai-itineraries-dev
+      CONVERSATIONS_TABLE: travel-ai-conversations-dev
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      init-dynamo:
+        condition: service_completed_successfully
     command: python -m app.worker
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: travel
-      POSTGRES_PASSWORD: travel
-      POSTGRES_DB: travel_ai
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U travel -d travel_ai"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  postgres_data:

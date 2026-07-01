@@ -9,7 +9,6 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 
 from app.config import get_settings
-from app.database import Base, engine
 from app.routers import (
     ads,
     analytics,
@@ -35,9 +34,6 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await session_store.connect()
-    if not settings.use_dynamo:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
     yield
     await session_store.disconnect()
 
