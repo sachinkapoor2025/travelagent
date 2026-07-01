@@ -55,6 +55,37 @@ async def execute_tool(session_id: str, tool_name: str, args: dict[str, Any], se
     if tool_name == "search_flights":
         from app.services.email_nurture import track_abandoned_search
 
+        def _airport(value: Any) -> Optional[str]:
+            if not value:
+                return None
+            text = str(value).strip()
+            if len(text) == 3 and text.isalpha():
+                return text.upper()
+            aliases = {
+                "dubai": "DXB", "abu dhabi": "AUH", "delhi": "DEL", "mumbai": "BOM",
+                "bangalore": "BLR", "chennai": "MAA", "london": "LHR", "melbourne": "MEL",
+                "sydney": "SYD", "singapore": "SIN", "bangkok": "BKK", "istanbul": "IST",
+            }
+            return aliases.get(text.lower(), text.upper()[:3] if len(text) == 3 else None)
+
+        origin = _airport(args.get("origin")) or _airport(session.get("origin"))
+        destination = _airport(args.get("destination")) or _airport(session.get("destination"))
+        departure_date = args.get("departure_date") or session.get("departure_date")
+
+        missing = []
+        if not origin:
+            missing.append("origin airport or city")
+        if not destination:
+            missing.append("destination airport or city")
+        if not departure_date:
+            missing.append("departure date")
+        if missing:
+            return {
+                "result": "Need more details before searching",
+                "missing": missing,
+                "hint": "Ask the customer for the missing details, then search again.",
+            }
+
         max_stops = args.get("max_stops")
         stop_pref = session.get("stop_preference") or args.get("stop_preference")
         if stop_pref == "direct":
@@ -62,17 +93,21 @@ async def execute_tool(session_id: str, tool_name: str, args: dict[str, Any], se
         elif stop_pref == "1-stop":
             max_stops = 1
 
-        search = FlightSearchRequest(
-            origin=args.get("origin", session.get("origin", "DXB")),
-            destination=args.get("destination", session.get("destination", "BOM")),
-            departure_date=args.get("departure_date", session.get("departure_date", "2026-08-01")),
-            return_date=args.get("return_date", session.get("return_date")),
-            passengers=args.get("passengers", session.get("passengers", 1)),
-            cabin_class=args.get("cabin_class", session.get("cabin_class", "economy")),
-            max_stops=max_stops,
-            market=market,
-        )
-        results = await duffel_client.search_flights(search)
+        try:
+            search = FlightSearchRequest(
+                origin=origin,
+                destination=destination,
+                departure_date=departure_date,
+                return_date=args.get("return_date", session.get("return_date")),
+                passengers=args.get("passengers", session.get("passengers", 1)),
+                cabin_class=args.get("cabin_class", session.get("cabin_class", "economy")),
+                max_stops=max_stops,
+                market=market,
+            )
+            results = await duffel_client.search_flights(search)
+        except Exception as exc:
+            return {"result": "Flight search failed", "error": str(exc), "hint": "Verify airport codes and date format YYYY-MM-DD."}
+
         await session_store.update(
             session_id,
             {

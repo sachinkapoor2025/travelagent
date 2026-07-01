@@ -131,6 +131,52 @@
 
     .panel-section {
       scroll-margin-top: 1rem;
+      display: none;
+    }
+
+    .panel-section.active {
+      display: block;
+    }
+
+    .stats {
+      display: none;
+    }
+
+    .stats.active {
+      display: grid;
+    }
+
+    .home-welcome {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+
+    .home-welcome.active {
+      display: block;
+    }
+
+    .home-welcome h2 {
+      font-size: 1.35rem;
+      margin-bottom: 0.5rem;
+      color: var(--blue-dark);
+    }
+
+    .home-welcome p {
+      color: var(--text-muted);
+      max-width: 520px;
+      margin: 0 auto 1.25rem;
+    }
+
+    .home-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
     }
 
     .panel-section.nav-flash {
@@ -202,14 +248,8 @@
     .stat:nth-child(4) .stat-value { color: var(--amber); }
 
     .layout {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.25rem;
+      display: block;
       margin-bottom: 1.25rem;
-    }
-
-    @media (max-width: 900px) {
-      .layout { grid-template-columns: 1fr; }
     }
 
     .panel {
@@ -559,12 +599,14 @@
         </div>
       </div>
       <nav class="tags" aria-label="Portal sections">
+        <button type="button" class="tag nav-tag active" data-section="section-home">Home</button>
         <button type="button" class="tag nav-tag" data-section="section-voice">Voice</button>
         <button type="button" class="tag nav-tag" data-section="section-whatsapp">WhatsApp</button>
         <button type="button" class="tag nav-tag" data-section="section-chat">Chat</button>
         <button type="button" class="tag nav-tag" data-section="section-leads">Leads</button>
         <button type="button" class="tag nav-tag" data-section="section-flights">Flights</button>
         <button type="button" class="tag nav-tag" data-section="section-hotels">Hotels</button>
+        <button type="button" class="tag nav-tag" data-section="section-itinerary">Itinerary</button>
         <button type="button" class="tag nav-tag" data-section="section-booking">Booking</button>
         <button type="button" class="tag nav-tag" data-section="section-mining">Mining</button>
         <button type="button" class="tag nav-tag" data-section="section-ads">Ads AI</button>
@@ -574,7 +616,7 @@
   </header>
 
   <main>
-    <div class="stats">
+    <div class="stats active" id="homeStats">
       <div class="stat">
         <div class="stat-label">Total Leads</div>
         <div class="stat-value" id="totalLeads">—</div>
@@ -596,6 +638,16 @@
         <div class="stat-value" id="conversionRate">—</div>
       </div>
     </div>
+
+    <section id="section-home" class="panel panel-section home-welcome active">
+      <h2>Welcome to TravelAI</h2>
+      <p>Your AI-powered travel sales portal for UAE &amp; India. Choose a section above to create leads, chat with Sarah, search flights, book trips, and more.</p>
+      <div class="home-actions">
+        <button type="button" class="btn btn-primary nav-jump" data-section="section-chat">Chat with Sarah</button>
+        <button type="button" class="btn btn-sm nav-jump" data-section="section-voice">Create Lead</button>
+        <button type="button" class="btn btn-sm nav-jump" data-section="section-flights">Search Flights</button>
+      </div>
+    </section>
 
     <div class="layout">
       <section id="section-voice" class="panel panel-section">
@@ -1054,56 +1106,47 @@
       });
     }
 
-    function scrollToSection(sectionId, focusSelector) {
-      const section = document.getElementById(sectionId);
-      if (!section) return;
-      section.scrollIntoView({ behavior: "smooth", block: "start" });
-      section.classList.remove("nav-flash");
-      void section.offsetWidth;
-      section.classList.add("nav-flash");
+    function showPage(sectionId, focusSelector) {
+      document.querySelectorAll(".panel-section").forEach((el) => {
+        el.classList.toggle("active", el.id === sectionId);
+      });
+      const isHome = sectionId === "section-home";
+      document.getElementById("homeStats")?.classList.toggle("active", isHome);
       document.querySelectorAll(".nav-tag").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.section === sectionId);
       });
+      window.scrollTo({ top: 0, behavior: "smooth" });
       if (focusSelector) {
         setTimeout(() => {
-          const el = section.querySelector(focusSelector);
+          const el = document.getElementById(sectionId)?.querySelector(focusSelector);
           if (el) el.focus();
-        }, 400);
+        }, 300);
       }
     }
 
-    document.querySelectorAll(".nav-tag").forEach((btn) => {
+    const focusMap = {
+      "section-home": null,
+      "section-voice": '[name="phone_local"]',
+      "section-whatsapp": '[name="phone_local"]',
+      "section-chat": 'input[name="message"]',
+      "section-leads": null,
+      "section-flights": 'input[name="origin"]',
+      "section-hotels": 'input[name="city"]',
+      "section-itinerary": 'input[name="destination"]',
+      "section-booking": '[name="phone_local"]',
+      "section-mining": '[name="phone_local"]',
+      "section-ads": 'input[name="origin"]',
+      "section-mcp": null,
+    };
+
+    document.querySelectorAll(".nav-tag, .nav-jump").forEach((btn) => {
       btn.addEventListener("click", () => {
         const id = btn.dataset.section;
-        const focusMap = {
-          "section-voice": '[name="phone_local"]',
-          "section-whatsapp": '[name="phone_local"]',
-          "section-chat": 'input[name="message"]',
-          "section-leads": null,
-          "section-flights": 'input[name="origin"]',
-          "section-hotels": 'input[name="city"]',
-          "section-booking": '[name="phone_local"]',
-          "section-mining": '[name="phone_local"]',
-          "section-ads": 'input[name="origin"]',
-          "section-mcp": null,
-        };
-        scrollToSection(id, focusMap[id]);
+        if (id) showPage(id, focusMap[id]);
       });
     });
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            document.querySelectorAll(".nav-tag").forEach((btn) => {
-              btn.classList.toggle("active", btn.dataset.section === entry.target.id);
-            });
-          }
-        });
-      },
-      { rootMargin: "-40% 0px -45% 0px", threshold: 0.1 }
-    );
-    document.querySelectorAll(".panel-section").forEach((el) => observer.observe(el));
+    showPage("section-home");
 
     function setApiStatus(msg, isError) {
       const el = document.getElementById("apiStatus");

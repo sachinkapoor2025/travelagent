@@ -168,6 +168,7 @@ class HealthResponse(BaseModel):
     status: str
     app: str
     environment: str
+    openai_configured: bool = False
 
 
 class ChatMessageRequest(BaseModel):

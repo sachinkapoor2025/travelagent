@@ -113,6 +113,22 @@ class Settings(BaseSettings):
         normalized = aliases.get(str(value).lower(), value)
         return normalized
 
+    @field_validator(
+        "openai_api_key",
+        "vapi_api_key",
+        "duffel_api_token",
+        "stripe_secret_key",
+        "razorpay_key_secret",
+        mode="before",
+    )
+    @classmethod
+    def strip_secret(cls, value: str) -> str:
+        return str(value).strip() if value else value
+
+    @property
+    def openai_configured(self) -> bool:
+        return bool(self.openai_api_key)
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]

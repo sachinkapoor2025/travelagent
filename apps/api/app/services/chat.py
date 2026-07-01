@@ -1,6 +1,7 @@
 """Web chat agent — tool-calling AI travel assistant."""
 
 import json
+import logging
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -16,17 +17,38 @@ from app.services.travel_tools import execute_tool, openai_tool_definitions
 from app.storage.dynamo import events_store, now_iso
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
-CHAT_SYSTEM_PROMPT = """You are Sarah, TravelAI's web chat travel assistant for UAE and India.
-Be warm, concise, and helpful. Support English, Arabic, Hindi, and Urdu.
+CHAT_SYSTEM_PROMPT = """You are Sarah, TravelAI's expert travel consultant for UAE and India.
+You help with flights, hotels, holiday packages, custom itineraries, visas, baggage rules,
+airport transfers, stopovers, price alerts, referrals, and end-to-end booking.
 
-Always use tools to search flights, hotels, packages, create bookings, and send payment links.
-Never invent prices — call search_flights first. Keep responses short (2-4 sentences)."""
+Guidelines:
+- Be warm, professional, and concise (2-4 sentences unless listing flight options).
+- Support English, Arabic, Hindi, and Urdu — reply in the customer's language when possible.
+- Use tools for live prices and bookings — never invent fares or availability.
+- If origin, destination, or travel dates are missing, ask ONE clear follow-up question.
+- Default assumptions when helpful: UAE customers often fly from DXB; India from BOM/DEL.
+- Proactively suggest hotels, packages, or day plans when someone asks about a destination.
+- For general travel advice (best time to visit, visa tips, packing), answer from your knowledge."""
 
 
 class ChatAgentService:
     def __init__(self) -> None:
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+        self._client: Optional[AsyncOpenAI] = None
+        self._client_key: str = ""
+
+    @property
+    def client(self) -> Optional[AsyncOpenAI]:
+        key = get_settings().openai_api_key
+        if not key:
+            self._client = None
+            self._client_key = ""
+            return None
+        if self._client is None or key != self._client_key:
+            self._client = AsyncOpenAI(api_key=key)
+            self._client_key = key
+        return self._client
 
     async def chat(
         self,
@@ -37,79 +59,112 @@ class ChatAgentService:
         email: Optional[str] = None,
     ) -> dict[str, Any]:
         session_id = session_id or f"chat_{uuid4().hex[:12]}"
-        session = await session_store.get(session_id)
+        try:
+            session = await session_store.get(session_id)
 
-        if not session:
-            market = detect_market_from_phone(phone) if phone else Market.UAE
-            prefs = await load_preferences(phone)
-            session = {
-                "channel": "web_chat",
-                "phone": phone,
-                "email": email,
-                "market": market.value,
-                "referral_code": referral_code,
-                "messages": [],
-                **prefs,
+            if not session:
+                market = detect_market_from_phone(phone) if phone else Market.UAE
+                prefs = await load_preferences(phone)
+                session = {
+                    "channel": "web_chat",
+                    "phone": phone,
+                    "email": email,
+                    "market": market.value,
+                    "referral_code": referral_code,
+                    "messages": [],
+                    **prefs,
+                }
+
+            if email:
+                session["email"] = email
+
+            session["messages"].append({"role": "user", "content": message})
+            agent_kind = classify_intent(message, session)
+            reply, tool_data = await self._generate_reply(session, session_id, agent_kind)
+            session["messages"].append({"role": "assistant", "content": reply})
+            if tool_data:
+                session["last_tool_data"] = tool_data
+            try:
+                await session_store.set(session_id, session)
+            except Exception:
+                logger.exception("Failed to persist chat session %s", session_id)
+
+            try:
+                self._track_event("chat_message", session_id, {"length": len(message), "agent": agent_kind})
+            except Exception:
+                logger.exception("Failed to track chat analytics event")
+
+            return {
+                "session_id": session_id,
+                "reply": reply,
+                "agent": agent_kind,
+                "suggested_actions": self._suggested_actions(session),
+                "tool_data": tool_data,
             }
-
-        if email:
-            session["email"] = email
-
-        session["messages"].append({"role": "user", "content": message})
-        agent_kind = classify_intent(message, session)
-        reply, tool_data = await self._generate_reply(session, session_id, agent_kind)
-        session["messages"].append({"role": "assistant", "content": reply})
-        if tool_data:
-            session["last_tool_data"] = tool_data
-        await session_store.set(session_id, session)
-
-        self._track_event("chat_message", session_id, {"length": len(message), "agent": agent_kind})
-
-        return {
-            "session_id": session_id,
-            "reply": reply,
-            "agent": agent_kind,
-            "suggested_actions": self._suggested_actions(session),
-            "tool_data": tool_data,
-        }
+        except Exception:
+            logger.exception("Chat request failed for session %s", session_id)
+            return {
+                "session_id": session_id,
+                "reply": "Sorry, I hit a brief glitch. Please tell me your origin, destination, and travel dates — I'll search flights for you.",
+                "agent": "general",
+                "suggested_actions": ["Search flights", "Hotels", "Packages"],
+                "tool_data": None,
+            }
 
     async def _generate_reply(self, session: dict[str, Any], session_id: str, agent_kind: str) -> tuple[str, Any]:
         if not self.client:
             return self._fallback(session), None
 
-        prefs_text = format_prefs_for_prompt(await load_preferences(session.get("phone")))
-        system = f"{CHAT_SYSTEM_PROMPT}\n{specialist_prompt(agent_kind)}\n{prefs_text}"
-        messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
-        for msg in session.get("messages", [])[-16]:
-            messages.append({"role": msg["role"], "content": msg["content"]})
+        try:
+            prefs_text = format_prefs_for_prompt(await load_preferences(session.get("phone")))
+            system = f"{CHAT_SYSTEM_PROMPT}\n{specialist_prompt(agent_kind)}\n{prefs_text}"
+            messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+            for msg in session.get("messages", [])[-16]:
+                messages.append({"role": msg["role"], "content": msg["content"]})
 
-        tools = openai_tool_definitions()
-        tool_data = None
+            tools = openai_tool_definitions()
+            tool_data = None
 
-        for _ in range(4):
-            response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                temperature=0.6,
-                max_tokens=500,
-            )
-            choice = response.choices[0].message
+            for _ in range(4):
+                response = await self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    temperature=0.6,
+                    max_tokens=500,
+                )
+                choice = response.choices[0].message
 
-            if choice.tool_calls:
-                messages.append(choice.model_dump(exclude_none=True))
-                for call in choice.tool_calls:
-                    args = json.loads(call.function.arguments or "{}")
-                    result = await execute_tool(session_id, call.function.name, args, session)
-                    session.update(await session_store.get(session_id) or {})
-                    tool_data = result
-                    messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)})
-                continue
+                if choice.tool_calls:
+                    assistant_msg: dict[str, Any] = {"role": "assistant", "content": choice.content or ""}
+                    assistant_msg["tool_calls"] = [
+                        {
+                            "id": call.id,
+                            "type": "function",
+                            "function": {"name": call.function.name, "arguments": call.function.arguments or "{}"},
+                        }
+                        for call in choice.tool_calls
+                    ]
+                    messages.append(assistant_msg)
+                    for call in choice.tool_calls:
+                        args = json.loads(call.function.arguments or "{}")
+                        try:
+                            result = await execute_tool(session_id, call.function.name, args, session)
+                        except Exception as tool_err:
+                            logger.exception("Chat tool %s failed", call.function.name)
+                            result = {"error": str(tool_err)}
+                        session.update(await session_store.get(session_id) or {})
+                        tool_data = result
+                        messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)})
+                    continue
 
-            return choice.content or "How can I help with your travel plans?", tool_data
+                return choice.content or "How can I help with your travel plans?", tool_data
 
-        return "I found some options for you — would you like to book or adjust your search?", tool_data
+            return "I found some options for you — would you like to book or adjust your search?", tool_data
+        except Exception:
+            logger.exception("OpenAI chat generation failed")
+            return self._fallback(session), None
 
     def _fallback(self, session: dict[str, Any]) -> str:
         if session.get("last_search"):
