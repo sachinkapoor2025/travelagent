@@ -11,9 +11,12 @@ from app.config import get_settings
 from app.models import Market
 from app.services.agent_router import classify_intent, specialist_prompt
 from app.services.chat_nlp import (
+    apply_message_to_session,
+    booking_flow_reply,
     build_context_prompt,
     has_flight_intent,
     merge_travel_context,
+    should_run_flight_search,
     smart_travel_reply,
     try_flight_search,
 )
@@ -34,10 +37,12 @@ Guidelines:
 - Be warm, natural, and concise — sound like a real human travel agent, not a bot.
 - Support English, Arabic, Hindi, and Urdu — reply in the customer's language when possible.
 - NEVER repeat the same question if the customer already gave origin, destination, or dates.
-- Use tools to search flights/hotels when you have enough details — never invent prices.
+- NEVER re-list flight search results if options were already shown — move to booking instead.
+- If the customer says book/confirm/proceed, collect name, phone, email — do NOT search again.
+- Use tools to search flights/hotels ONLY when you have origin, destination, date AND no results yet.
 - If details are missing, ask ONLY for what is missing (one question at a time).
 - Default: UAE customers often fly from DXB/AUH; India from DEL/BOM/BLR.
-- When listing flights, use bullet points with airline, price, and stops."""
+- When listing flights, use numbered options with rounded prices and stops."""
 
 
 class ChatAgentService:
@@ -87,6 +92,7 @@ class ChatAgentService:
 
             session["messages"].append({"role": "user", "content": message})
             merge_travel_context(session)
+            apply_message_to_session(session, message)
             agent_kind = classify_intent(message, session)
 
             reply, tool_data = await self._generate_reply(session, session_id, agent_kind, message)
@@ -130,24 +136,40 @@ class ChatAgentService:
         agent_kind: str,
         message: str,
     ) -> tuple[str, Any]:
-        # Reliable path: when we have full trip details, search immediately.
-        if has_flight_intent(session, message):
+        apply_message_to_session(session, message)
+
+        # Booking flow — never re-search when customer wants to book
+        booking = booking_flow_reply(session, message)
+        if booking:
+            return booking, None
+
+        if should_run_flight_search(session, message):
             search_reply, tool_data = await try_flight_search(session, session_id)
             if search_reply:
                 return search_reply, tool_data
 
-        if self.client:
-            openai_reply, tool_data = await self._openai_reply(session, session_id, agent_kind)
+        if self.client and not session.get("last_search"):
+            openai_reply, tool_data = await self._openai_reply(session, session_id, agent_kind, message)
             if openai_reply:
+                return openai_reply, tool_data
+        elif self.client and session.get("last_search"):
+            openai_reply, tool_data = await self._openai_reply(session, session_id, agent_kind, message)
+            if openai_reply and not self._looks_like_flight_listing(openai_reply):
                 return openai_reply, tool_data
 
         return await smart_travel_reply(session, session_id, message)
+
+    @staticmethod
+    def _looks_like_flight_listing(text: str) -> bool:
+        lower = text.lower()
+        return "here are the best" in lower or "options i found" in lower
 
     async def _openai_reply(
         self,
         session: dict[str, Any],
         session_id: str,
         agent_kind: str,
+        message: str,
     ) -> tuple[Optional[str], Any]:
         try:
             prefs_text = format_prefs_for_prompt(await load_preferences(session.get("phone")))
@@ -157,18 +179,20 @@ class ChatAgentService:
             for msg in session.get("messages", [])[-16]:
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
-            tools = openai_tool_definitions()
+            tools = openai_tool_definitions() if should_run_flight_search(session, message) else None
             tool_data = None
 
             for _ in range(4):
-                response = await self.client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=messages,
-                    tools=tools,
-                    tool_choice="auto",
-                    temperature=0.5,
-                    max_tokens=600,
-                )
+                create_kwargs: dict[str, Any] = {
+                    "model": "gpt-4o-mini",
+                    "messages": messages,
+                    "temperature": 0.4,
+                    "max_tokens": 600,
+                }
+                if tools:
+                    create_kwargs["tools"] = tools
+                    create_kwargs["tool_choice"] = "auto"
+                response = await self.client.chat.completions.create(**create_kwargs)
                 choice = response.choices[0].message
 
                 if choice.tool_calls:
