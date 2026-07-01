@@ -11,19 +11,29 @@ logger.setLevel(logging.INFO)
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     job = event.get("job") or event.get("detail", {}).get("job")
-    if job in {"reddit", "telegram", "directories"}:
-        results = asyncio.run(_run_miner(job))
+    miner_jobs = {"reddit", "telegram", "directories", "b2b", "b2c"}
+    if job in miner_jobs:
+        results = asyncio.run(_run_miner(job, event))
         return {"statusCode": 200, "body": json.dumps(results)}
 
     results = asyncio.run(_run_all_jobs())
     return {"statusCode": 200, "body": json.dumps(results)}
 
 
-async def _run_miner(source_id: str) -> dict[str, Any]:
-    from app.services.miners.orchestrator import run_source
+async def _run_miner(source_id: str, event: dict[str, Any]) -> dict[str, Any]:
+    from app.services.miners.orchestrator import run_source_batch
 
+    batch_size = int(event.get("batch_size") or 150)
+    cursor = event.get("cursor")
+    reset = bool(event.get("reset", False))
     try:
-        return await run_source(source_id, force=True, fast=False)
+        return await run_source_batch(
+            source_id,
+            force=True,
+            batch_size=batch_size,
+            cursor=cursor,
+            reset=reset,
+        )
     except Exception as exc:
         logger.exception("Miner %s failed", source_id)
         return {"source": source_id, "error": str(exc)}

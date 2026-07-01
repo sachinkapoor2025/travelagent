@@ -7,11 +7,31 @@ from typing import Any
 from app.storage.dynamo import events_store
 
 DEFAULT_SOURCES: dict[str, dict[str, Any]] = {
-    "reddit": {"enabled": True, "label": "Reddit", "schedule": "every 2 hours", "markets": ["uae", "india", "uk", "au", "us"]},
-    "telegram": {"enabled": True, "label": "Telegram", "schedule": "every hour", "markets": ["uae", "india", "uk", "au", "us"]},
-    "directories": {"enabled": True, "label": "Google Maps & Directories (OSM free + SerpAPI optional)", "schedule": "daily 3am UTC", "markets": ["uae", "india", "uk", "au", "us"]},
-    "clay": {"enabled": False, "label": "Clay Webhook", "schedule": "real-time", "markets": []},
-    "apollo": {"enabled": False, "label": "Apollo Webhook", "schedule": "real-time", "markets": []},
+    "b2b": {
+        "enabled": True,
+        "label": "B2B · Travel Agencies (Global Directories)",
+        "schedule": "on demand · batched",
+        "segment": "b2b",
+        "markets": "worldwide",
+    },
+    "b2c": {
+        "enabled": True,
+        "label": "B2C · Reddit, Telegram & Travel Forums",
+        "schedule": "on demand · batched",
+        "segment": "b2c",
+        "markets": "worldwide",
+    },
+    "reddit": {"enabled": True, "label": "Reddit (B2C)", "schedule": "every 2 hours", "segment": "b2c", "markets": "worldwide"},
+    "telegram": {"enabled": True, "label": "Telegram (B2C)", "schedule": "every hour", "segment": "b2c", "markets": "worldwide"},
+    "directories": {
+        "enabled": True,
+        "label": "Google Maps & Directories (B2B)",
+        "schedule": "daily 3am UTC",
+        "segment": "b2b",
+        "markets": "worldwide",
+    },
+    "clay": {"enabled": False, "label": "Clay Webhook (B2B)", "schedule": "real-time", "segment": "b2b", "markets": []},
+    "apollo": {"enabled": False, "label": "Apollo Webhook (B2B)", "schedule": "real-time", "segment": "b2b", "markets": []},
 }
 
 

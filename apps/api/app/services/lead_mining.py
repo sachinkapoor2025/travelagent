@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.services.lead_enrichment import lead_enrichment
+from app.services.lead_segment import classify_segment
 from app.services.miners.auto_action import auto_action_lead
 from app.services.voice import initiate_outbound_call
 from app.storage.dynamo import events_store, now_iso
@@ -31,6 +32,7 @@ class LeadMiningService:
 
         for raw in leads_raw:
             lead_data = self._normalize(raw, source)
+            lead_data["lead_segment"] = classify_segment(source, lead_data.get("lead_segment"))
             if not lead_data.get("phone") and not lead_data.get("destination"):
                 continue
             saved = await self._save_lead(await lead_enrichment.enrich(lead_data))
@@ -116,6 +118,8 @@ class LeadMiningService:
                     "source_detail": display.get("source_detail"),
                     "travel_intent": display.get("travel_intent"),
                     "market": display.get("market"),
+                    "lead_segment": display.get("lead_segment"),
+                    "segment_label": display.get("segment_label"),
                     "status": display.get("status"),
                     "notes": display.get("notes"),
                     "created_at": display.get("created_at"),
@@ -160,6 +164,7 @@ class LeadMiningService:
             "opt_in_marketing": raw.get("opt_in_marketing", True),
             "source_detail": raw.get("source_detail") or source,
             "travel_intent": raw.get("travel_intent"),
+            "lead_segment": raw.get("lead_segment") or classify_segment(source),
             "notes": raw.get("notes") or raw.get("context") or raw.get("snippet"),
         }
 

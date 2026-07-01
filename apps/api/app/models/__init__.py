@@ -9,6 +9,12 @@ class Market(str, enum.Enum):
     UK = "uk"
     US = "us"
     AU = "au"
+    GLOBAL = "global"
+
+
+class LeadSegment(str, enum.Enum):
+    B2B = "b2b"
+    B2C = "b2c"
 
 
 class LeadStatus(str, enum.Enum):

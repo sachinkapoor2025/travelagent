@@ -32,6 +32,7 @@ async def list_leads(
     status: Optional[LeadStatus] = None,
     market: Optional[str] = None,
     source: Optional[str] = None,
+    segment: Optional[str] = None,
     q: Optional[str] = None,
     limit: int = 200,
 ) -> list[LeadResponse]:
@@ -39,6 +40,7 @@ async def list_leads(
         status=status.value if status else None,
         market=market,
         source=source,
+        segment=segment,
         q=q,
         limit=limit,
     )

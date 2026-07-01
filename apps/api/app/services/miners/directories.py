@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from app.config import get_settings
+from app.services.miners.global_markets import GLOBAL_MARKETS, market_batch
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -19,51 +20,56 @@ OVERPASS_URLS = [
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
 USER_AGENT = "TravelAI-LeadMiner/1.0"
-
-# lat, lon, market — global travel hubs
-MARKET_GEO: list[tuple[str, float, float, str]] = [
-    ("travel agency Dubai UAE", 25.2048, 55.2708, "uae"),
-    ("travel agents Mumbai India", 19.0760, 72.8777, "india"),
-    ("travel agency London UK", 51.5074, -0.1278, "uk"),
-    ("travel agents Melbourne Australia", -37.8136, 144.9631, "au"),
-    ("travel agency New York", 40.7128, -74.0060, "us"),
-]
-
-SERP_QUERIES = [
-    ("travel agency Dubai UAE", "uae"),
-    ("travel agents Mumbai India", "india"),
-    ("travel agency London UK flights", "uk"),
-    ("travel agents Melbourne Australia", "au"),
-    ("travel agency New York flights", "us"),
-]
+MARKETS_PER_PASS = 6
 
 
 async def mine_directories(fast: bool = False) -> list[dict[str, Any]]:
-    leads: list[dict[str, Any]] = []
-    if settings.serpapi_key and not fast:
-        leads.extend(await _mine_serpapi())
-    leads.extend(await _mine_osm_overpass(fast=fast))
-    return _dedupe_leads(leads)
+    leads, _, _, _ = await mine_directories_batch(cursor=0, import_limit=30 if fast else 150)
+    return leads
 
 
-async def _mine_serpapi() -> list[dict[str, Any]]:
+async def mine_directories_batch(
+    cursor: int = 0,
+    import_limit: int = 150,
+) -> tuple[list[dict[str, Any]], int, bool, int]:
+    """Fetch B2B agency leads for a slice of global markets."""
+    total_markets = len(GLOBAL_MARKETS)
     leads: list[dict[str, Any]] = []
+    next_cursor = cursor
+    complete = cursor >= total_markets
+
+    if settings.serpapi_key and cursor == 0:
+        leads.extend(await _mine_serpapi_global())
+
+    if not complete:
+        batch_markets, next_cursor, complete = market_batch(cursor, MARKETS_PER_PASS)
+        osm_leads = await _mine_osm_markets(batch_markets)
+        leads.extend(osm_leads)
+
+    unique = _dedupe_leads(leads)[:import_limit]
+    return unique, next_cursor, complete, total_markets
+
+
+async def _mine_serpapi_global() -> list[dict[str, Any]]:
+    leads: list[dict[str, Any]] = []
+    if not settings.serpapi_key:
+        return leads
+    queries = [(label, market) for label, _, _, market in GLOBAL_MARKETS[:12]]
     async with httpx.AsyncClient(timeout=30.0) as client:
-        for query, market in SERP_QUERIES:
+        for query, market in queries:
             try:
                 resp = await client.get(
                     "https://serpapi.com/search.json",
                     params={
                         "engine": "google_maps",
-                        "q": query,
+                        "q": f"travel agency {query}",
                         "api_key": settings.serpapi_key,
                         "type": "search",
                     },
                 )
                 if resp.status_code != 200:
-                    logger.warning("SerpAPI %s returned %s", query, resp.status_code)
                     continue
-                for place in resp.json().get("local_results", [])[:8]:
+                for place in resp.json().get("local_results", [])[:6]:
                     phone = _normalize_phone(place.get("phone") or "", market)
                     if not phone:
                         continue
@@ -75,6 +81,7 @@ async def _mine_serpapi() -> list[dict[str, Any]]:
                             "market": market,
                             "source": "directories",
                             "source_detail": f"google_maps:{query}",
+                            "lead_segment": "b2b",
                             "travel_intent": "exploring",
                             "opt_in_marketing": True,
                         }
@@ -84,21 +91,16 @@ async def _mine_serpapi() -> list[dict[str, Any]]:
     return leads
 
 
-async def _mine_osm_overpass(fast: bool = False) -> list[dict[str, Any]]:
-    """Free travel-agency listings from OpenStreetMap — parallel fetch with hard timeout."""
+async def _mine_osm_markets(markets: list[tuple[str, float, float, str]]) -> list[dict[str, Any]]:
     headers = {"User-Agent": USER_AGENT}
-    markets = MARKET_GEO[:2] if fast else MARKET_GEO
-    wait_timeout = 16.0 if fast else 40.0
-
-    async with httpx.AsyncClient(timeout=18.0 if fast else 30.0, headers=headers) as client:
+    async with httpx.AsyncClient(timeout=25.0, headers=headers) as client:
         tasks = [
             asyncio.create_task(_fetch_osm_market(client, label, lat, lon, market))
             for label, lat, lon, market in markets
         ]
-        done, pending = await asyncio.wait(tasks, timeout=wait_timeout)
+        done, pending = await asyncio.wait(tasks, timeout=120.0)
         for task in pending:
             task.cancel()
-
         leads: list[dict[str, Any]] = []
         for task in done:
             try:
@@ -107,8 +109,7 @@ async def _mine_osm_overpass(fast: bool = False) -> list[dict[str, Any]]:
                     leads.extend(batch)
             except Exception as exc:
                 logger.warning("OSM batch error: %s", exc)
-
-    return [lead for lead in leads if lead.get("phone")]
+        return leads
 
 
 async def _fetch_osm_market(
@@ -119,11 +120,12 @@ async def _fetch_osm_market(
     market: str,
 ) -> list[dict[str, Any]]:
     query = (
-        f"[out:json][timeout:15];("
-        f'node["office"="travel_agency"](around:35000,{lat},{lon});'
-        f'node["shop"="travel_agency"](around:35000,{lat},{lon});'
-        f'node["tourism"="travel_agency"](around:35000,{lat},{lon});'
-        f");out body 15;"
+        f"[out:json][timeout:20];("
+        f'node["office"="travel_agency"](around:40000,{lat},{lon});'
+        f'node["shop"="travel_agency"](around:40000,{lat},{lon});'
+        f'node["tourism"="travel_agency"](around:40000,{lat},{lon});'
+        f'way["office"="travel_agency"](around:40000,{lat},{lon});'
+        f");out body 20;"
     )
     leads: list[dict[str, Any]] = []
     try:
@@ -133,7 +135,7 @@ async def _fetch_osm_market(
             if resp.status_code == 200:
                 break
             if resp.status_code == 429:
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(1.5)
         if not resp or resp.status_code != 200:
             logger.warning("Overpass %s returned %s", label, resp.status_code if resp else "none")
             return leads
@@ -171,6 +173,7 @@ def _osm_element_to_lead(element: dict[str, Any], market: str, label: str) -> di
         "market": market,
         "source": "directories",
         "source_detail": f"osm:{label}",
+        "lead_segment": "b2b",
         "travel_intent": "exploring",
         "opt_in_marketing": True,
     }
@@ -189,46 +192,53 @@ def _normalize_phone(raw: str, market: str) -> str:
     if market == "india" and cleaned.startswith("0") and len(cleaned) == 11:
         cleaned = cleaned[1:]
 
-    if market == "uae":
-        if cleaned.startswith("+971") and len(cleaned) >= 12:
-            return cleaned[:13]
-        if cleaned.startswith("971") and len(cleaned) >= 12:
-            return "+" + cleaned[:12]
-        if cleaned.startswith("0") and len(cleaned) >= 9:
-            return "+971" + cleaned[1:10]
-        if len(cleaned) == 9 and cleaned[0] in "2456789":
-            return "+971" + cleaned
+    market_prefixes = {
+        "uae": "+971",
+        "india": "+91",
+        "uk": "+44",
+        "us": "+1",
+        "au": "+61",
+        "ca": "+1",
+        "sg": "+65",
+        "hk": "+852",
+        "jp": "+81",
+        "kr": "+82",
+        "fr": "+33",
+        "de": "+49",
+        "nl": "+31",
+        "it": "+39",
+        "es": "+34",
+        "tr": "+90",
+        "eg": "+20",
+        "za": "+27",
+        "ke": "+254",
+        "sa": "+966",
+        "qa": "+974",
+        "kw": "+965",
+        "om": "+968",
+        "il": "+972",
+        "br": "+55",
+        "mx": "+52",
+        "ar": "+54",
+        "nz": "+64",
+        "th": "+66",
+        "my": "+60",
+        "id": "+62",
+        "ph": "+63",
+    }
 
-    if market == "india":
-        if cleaned.startswith("+91") and len(cleaned) >= 12:
-            return cleaned[:13]
-        if len(cleaned) == 10 and cleaned[0] in "6789":
-            return "+91" + cleaned
-        if cleaned.startswith("91") and len(cleaned) == 12:
-            return "+" + cleaned
-
-    if market == "uk":
-        if cleaned.startswith("+44"):
-            return cleaned[:13]
-        if cleaned.startswith("44") and len(cleaned) >= 12:
-            return "+" + cleaned[:12]
-        if cleaned.startswith("0") and 10 <= len(cleaned) <= 11:
-            return "+44" + cleaned[1:]
-
-    if market == "au":
-        if cleaned.startswith("+61"):
-            return cleaned[:12]
-        if cleaned.startswith("0") and len(cleaned) >= 9:
-            return "+61" + cleaned[1:10]
-
-    if market == "us":
-        if cleaned.startswith("+1") and len(cleaned) >= 12:
-            return cleaned[:12]
-        if len(cleaned) == 10:
-            return "+1" + cleaned
+    prefix = market_prefixes.get(market)
+    if prefix and cleaned.startswith(prefix.lstrip("+")):
+        return "+" + cleaned if not cleaned.startswith("+") else cleaned
+    if prefix and cleaned.startswith("0") and len(cleaned) >= 9:
+        return prefix + cleaned[1:]
 
     if cleaned.startswith("+") and 10 <= len(cleaned) <= 15:
         return cleaned
+    if market == "india" and len(cleaned) == 10 and cleaned[0] in "6789":
+        return "+91" + cleaned
+    if market == "us" and len(cleaned) == 10:
+        return "+1" + cleaned
     return ""
 
 

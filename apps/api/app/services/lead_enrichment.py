@@ -92,6 +92,12 @@ Lead: {json.dumps({k: lead.get(k) for k in ['phone','name','origin','destination
             score += 15
         if lead.get("location"):
             score += 5
+        if lead.get("lead_segment") == "b2c":
+            score += 12
+        if lead.get("lead_segment") == "b2c" and lead.get("destination"):
+            score += 8
+        if lead.get("departure_date") and lead.get("lead_segment") == "b2c":
+            score += 5
         return min(score, 100)
 
     def _guess_language(self, lead: dict[str, Any]) -> str:

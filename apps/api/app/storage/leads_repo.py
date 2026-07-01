@@ -8,6 +8,7 @@ from typing import Any, Optional
 from app.config import get_settings
 from app.models import LeadSource, LeadStatus, Market
 from app.services.leads import calculate_lead_score
+from app.services.lead_segment import classify_segment, segment_display
 from app.services.source_labels import enrich_lead_display
 from app.storage.dynamo import leads_store, now_iso
 
@@ -21,6 +22,9 @@ _EXTRA_FIELDS = (
     "notes",
     "temperature",
     "preferred_language",
+    "lead_segment",
+    "contact_synthetic",
+    "external_id",
 )
 
 
@@ -50,6 +54,9 @@ def _dict_to_lead(data: dict[str, Any]) -> dict[str, Any]:
     for field in _EXTRA_FIELDS:
         if data.get(field) is not None:
             lead[field] = data[field]
+    if not lead.get("lead_segment"):
+        lead["lead_segment"] = classify_segment(lead.get("source"))
+    lead["segment_label"] = segment_display(lead.get("lead_segment"))
     return enrich_lead_display(lead)
 
 
@@ -71,6 +78,8 @@ def _matches_query(lead: dict[str, Any], q: str) -> bool:
         lead.get("travel_intent"),
         lead.get("notes"),
         lead.get("status"),
+        lead.get("lead_segment"),
+        lead.get("segment_label"),
     ]
     enrichment = lead.get("enrichment") or {}
     if isinstance(enrichment, dict):
@@ -143,20 +152,30 @@ class LeadRepository:
         status: Optional[str] = None,
         market: Optional[str] = None,
         source: Optional[str] = None,
+        segment: Optional[str] = None,
         q: Optional[str] = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        items = leads_store().query_gsi1("LEADS", limit=max(limit, 200))
+        items = leads_store().query_gsi1("LEADS", limit=max(limit, 300))
         leads = [_dict_to_lead(i) for i in items]
         if status:
             leads = [l for l in leads if l["status"] == status]
         if market:
-            leads = [l for l in leads if l.get("market") == market]
+            needle = market.lower()
+            leads = [l for l in leads if needle in str(l.get("market", "")).lower() or needle in str(l.get("location", "")).lower()]
         if source:
             leads = [l for l in leads if l.get("source") == source]
+        if segment:
+            leads = [l for l in leads if l.get("lead_segment") == segment]
         if q:
             leads = [l for l in leads if _matches_query(l, q)]
-        leads.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        leads.sort(
+            key=lambda x: (
+                1 if x.get("lead_segment") == "b2c" else 0,
+                x.get("created_at", ""),
+            ),
+            reverse=True,
+        )
         return leads[:limit]
 
     async def get_by_id(self, lead_id: str) -> Optional[dict[str, Any]]:

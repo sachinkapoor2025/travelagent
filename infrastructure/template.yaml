@@ -477,7 +477,7 @@ Resources:
     Properties:
       FunctionName: !Sub travel-ai-worker-${Environment}
       PackageType: Image
-      Timeout: 180
+      Timeout: 900
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref LeadsTable

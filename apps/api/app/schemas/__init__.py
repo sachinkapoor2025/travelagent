@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.models import BookingStatus, Language, LeadSource, LeadStatus, Market, PaymentStatus
+from app.models import BookingStatus, Language, LeadSegment, LeadSource, LeadStatus, Market, PaymentStatus
 
 
 class LeadCreate(BaseModel):
@@ -34,7 +34,7 @@ class LeadResponse(BaseModel):
     phone: str
     email: Optional[str] = None
     name: Optional[str] = None
-    market: Market
+    market: str
     source: LeadSource
     status: LeadStatus
     score: int
@@ -54,6 +54,9 @@ class LeadResponse(BaseModel):
     travel_intent: Optional[str] = None
     notes: Optional[str] = None
     enrichment: Optional[Dict[str, Any]] = None
+    lead_segment: Optional[LeadSegment] = None
+    segment_label: Optional[str] = None
+    contact_synthetic: Optional[bool] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

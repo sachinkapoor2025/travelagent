@@ -753,6 +753,29 @@
     .source-pill.telegram { background: #dbeafe; color: #1d4ed8; }
     .source-pill.directories { background: #dcfce7; color: #15803d; }
 
+    .segment-pill {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+
+    .segment-pill.b2c { background: #fce7f3; color: #be185d; }
+    .segment-pill.b2b { background: #e0e7ff; color: #3730a3; }
+
+    .mining-progress {
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background: var(--bg-soft);
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    .mining-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.45rem; }
+
     .lead-modal-backdrop {
       position: fixed;
       inset: 0;
@@ -1064,29 +1087,31 @@
       </div>
       <div class="lead-filters">
         <div>
-          <label class="field-label">Search</label>
-          <input id="leadSearchInput" type="search" placeholder="Phone, name, route, location, source…" />
+          <label class="field-label">Search worldwide</label>
+          <input id="leadSearchInput" type="search" placeholder="Any country, city, phone, route, name…" />
         </div>
         <div>
-          <label class="field-label">Country / Market</label>
-          <select id="leadMarketFilter">
-            <option value="">All markets</option>
-            <option value="uae">🇦🇪 UAE</option>
-            <option value="india">🇮🇳 India</option>
-            <option value="uk">🇬🇧 UK</option>
-            <option value="us">🇺🇸 US</option>
-            <option value="au">🇦🇺 Australia</option>
+          <label class="field-label">Country / region</label>
+          <input id="leadMarketFilter" type="text" placeholder="e.g. dubai, japan, global" />
+        </div>
+        <div>
+          <label class="field-label">Type</label>
+          <select id="leadSegmentFilter">
+            <option value="">All types</option>
+            <option value="b2c">B2C — consumers (priority)</option>
+            <option value="b2b">B2B — agencies</option>
           </select>
         </div>
         <div>
           <label class="field-label">Source</label>
           <select id="leadSourceFilter">
             <option value="">All sources</option>
+            <option value="b2c">B2C bundle</option>
+            <option value="b2b">B2B bundle</option>
             <option value="directories">Google Maps / Directories</option>
             <option value="reddit">Reddit</option>
             <option value="telegram">Telegram</option>
             <option value="manual">Manual</option>
-            <option value="website">Website</option>
           </select>
         </div>
         <div>
@@ -1107,6 +1132,7 @@
         <table>
           <thead>
             <tr>
+              <th>Type</th>
               <th>Name</th>
               <th>Phone</th>
               <th>Route</th>
@@ -1119,7 +1145,7 @@
             </tr>
           </thead>
           <tbody id="leadsTable">
-            <tr class="empty-row"><td colspan="9">Loading leads…</td></tr>
+            <tr class="empty-row"><td colspan="10">Loading leads…</td></tr>
           </tbody>
         </table>
       </div>
@@ -1226,26 +1252,29 @@
         <button type="button" class="btn btn-sm" id="runOutboundBtn">Run Outbound Campaign</button>
       </div>
       <h3 style="font-size:0.95rem;margin-bottom:0.5rem">Live Pipeline</h3>
-      <div class="lead-filters" style="grid-template-columns:2fr repeat(2,minmax(120px,1fr)) auto;margin-bottom:0.75rem">
+      <div class="lead-filters" style="grid-template-columns:2fr repeat(3,minmax(110px,1fr)) auto;margin-bottom:0.75rem">
         <div>
           <label class="field-label">Search pipeline</label>
-          <input id="miningSearchInput" type="search" placeholder="Phone, name, location, source…" />
+          <input id="miningSearchInput" type="search" placeholder="Any country, city, phone, route…" />
         </div>
         <div>
-          <label class="field-label">Market</label>
-          <select id="miningMarketFilter">
+          <label class="field-label">Country / region</label>
+          <input id="miningMarketFilter" type="text" placeholder="worldwide" />
+        </div>
+        <div>
+          <label class="field-label">Type</label>
+          <select id="miningSegmentFilter">
             <option value="">All</option>
-            <option value="uae">UAE</option>
-            <option value="india">India</option>
-            <option value="uk">UK</option>
-            <option value="us">US</option>
-            <option value="au">AU</option>
+            <option value="b2c">B2C</option>
+            <option value="b2b">B2B</option>
           </select>
         </div>
         <div>
           <label class="field-label">Source</label>
           <select id="miningSourceFilter">
             <option value="">All</option>
+            <option value="b2b">B2B bundle</option>
+            <option value="b2c">B2C bundle</option>
             <option value="directories">Google Maps</option>
             <option value="reddit">Reddit</option>
             <option value="telegram">Telegram</option>
@@ -1257,6 +1286,7 @@
         <table class="mining-pipeline">
           <thead>
             <tr>
+              <th>Type</th>
               <th>Name</th>
               <th>Phone</th>
               <th>Route</th>
@@ -1268,7 +1298,7 @@
             </tr>
           </thead>
           <tbody id="miningPipelineBody">
-            <tr><td colspan="8">Loading pipeline…</td></tr>
+            <tr><td colspan="9">Loading pipeline…</td></tr>
           </tbody>
         </table>
       </div>
@@ -1776,6 +1806,27 @@
     let leadsCache = [];
     let miningPipelineCache = [];
 
+    function segmentPillHtml(segment, label) {
+      const seg = (segment || "").toLowerCase();
+      const text = label || (seg === "b2c" ? "B2C" : seg === "b2b" ? "B2B" : "—");
+      return `<span class="segment-pill ${seg}">${escapeHtml(text)}</span>`;
+    }
+
+    function progressHtml(sourceId, progress) {
+      if (!progress) return "";
+      const p = progress[sourceId] || progress;
+      if (!p || !p.last_run_at && !p.message) {
+        return '<div class="mining-progress">Not fetched yet · up to 150 leads per batch</div>';
+      }
+      const complete = p.complete ? "✓ All markets fetched" : `↻ ${p.markets_remaining ?? "?"} markets left`;
+      const time = p.completed_at || p.last_run_at || "—";
+      return `<div class="mining-progress">
+        <strong>${escapeHtml(p.message || "")}</strong><br/>
+        Total imported: ${p.total_imported ?? 0} · Last batch: ${p.last_batch_imported ?? 0} · ${complete}<br/>
+        <span class="meta">Updated ${escapeHtml(time)}</span>
+      </div>`;
+    }
+
     function sourcePillHtml(source, label) {
       const text = label || source || "Unknown";
       const cls = ["directories", "reddit", "telegram"].includes(source) ? source : "";
@@ -1792,27 +1843,37 @@
       const params = new URLSearchParams();
       params.set("limit", "200");
       const q = document.getElementById("leadSearchInput")?.value?.trim();
-      const market = document.getElementById("leadMarketFilter")?.value;
+      const market = document.getElementById("leadMarketFilter")?.value?.trim();
       const source = document.getElementById("leadSourceFilter")?.value;
+      const segment = document.getElementById("leadSegmentFilter")?.value;
       const status = document.getElementById("leadStatusFilter")?.value;
       if (q) params.set("q", q);
       if (market) params.set("market", market);
-      if (source) params.set("source", source);
+      if (source && !["b2b", "b2c"].includes(source)) params.set("source", source);
+      if (segment) params.set("segment", segment);
+      else if (source === "b2b" || source === "b2c") params.set("segment", source);
       if (status) params.set("status", status);
       return params.toString();
     }
 
     function filterMiningPipeline(rows) {
       const q = (document.getElementById("miningSearchInput")?.value || "").trim().toLowerCase();
-      const market = document.getElementById("miningMarketFilter")?.value || "";
+      const market = (document.getElementById("miningMarketFilter")?.value || "").trim().toLowerCase();
+      const segment = document.getElementById("miningSegmentFilter")?.value || "";
       const source = document.getElementById("miningSourceFilter")?.value || "";
       return rows.filter((row) => {
-        if (market && row.market !== market) return false;
-        if (source && row.source !== source) return false;
+        if (segment && row.lead_segment !== segment) return false;
+        if (source === "b2b" && row.lead_segment !== "b2b") return false;
+        if (source === "b2c" && row.lead_segment !== "b2c") return false;
+        if (source && !["b2b", "b2c"].includes(source) && row.source !== source) return false;
+        if (market) {
+          const blob = `${row.market || ""} ${row.location || ""}`.toLowerCase();
+          if (!blob.includes(market)) return false;
+        }
         if (!q) return true;
         const blob = [
           row.phone, row.name, row.route, row.location, row.source_label,
-          row.source, row.market, row.status, row.notes, row.travel_intent,
+          row.source, row.market, row.status, row.notes, row.travel_intent, row.lead_segment,
         ].filter(Boolean).join(" ").toLowerCase();
         return blob.includes(q);
       });
@@ -1822,11 +1883,12 @@
       const tbody = document.getElementById("miningPipelineBody");
       const filtered = filterMiningPipeline(rows);
       if (!filtered.length) {
-        tbody.innerHTML = '<tr><td colspan="8">No leads match your filters</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9">No leads match your filters</td></tr>';
         return;
       }
       tbody.innerHTML = filtered.map((row) => `
         <tr class="lead-row-clickable" data-lead-id="${escapeHtml(row.id || "")}">
+          <td>${segmentPillHtml(row.lead_segment, row.segment_label)}</td>
           <td>${escapeHtml(row.name || "—")}</td>
           <td>${escapeHtml(row.phone || "—")}</td>
           <td>${escapeHtml(row.route || "—")}</td>
@@ -1854,9 +1916,12 @@
       const body = document.getElementById("leadDetailBody");
       const label = lead.source_label || lead.source || "Lead";
       title.textContent = lead.name || lead.phone || "Lead details";
-      subtitle.textContent = `${label} · ${(lead.market || "").toUpperCase()} · Score ${lead.score ?? "—"}`;
+      const segLabel = lead.segment_label || (lead.lead_segment === "b2c" ? "B2C" : lead.lead_segment === "b2b" ? "B2B" : "");
+      subtitle.textContent = `${segLabel} · ${label} · ${(lead.market || "").toUpperCase()} · Score ${lead.score ?? "—"}`;
+      const phoneDisplay = lead.contact_synthetic ? `${lead.phone} (contact via platform)` : lead.phone;
       const items = [
-        ["Phone", lead.phone],
+        ["Type", lead.segment_label || (lead.lead_segment || "").toUpperCase()],
+        ["Phone", phoneDisplay],
         ["Email", lead.email],
         ["Location", lead.location || lead.enrichment?.location],
         ["Route", `${lead.origin || "—"} → ${lead.destination || "—"}`],
@@ -1901,44 +1966,35 @@
       modal.setAttribute("aria-hidden", "true");
     }
 
-    async function fetchSourceLeads(sourceId, btn) {
+    async function fetchSourceLeads(sourceId, btn, options = {}) {
+      const { reset = false, batchSize = 150 } = options;
       const statusEl = document.getElementById(`miningStatus-${sourceId}`);
       setButtonLoading(btn, true);
-      if (statusEl) statusEl.textContent = "Queuing fetch (all markets)…";
+      if (statusEl) statusEl.textContent = reset ? "Resetting & starting batch…" : "Queuing batch fetch (worldwide)…";
       try {
-        const data = await apiFetch(`/lead-mining/run/${sourceId}?force=true`, { method: "POST" });
-        let msg;
-        if (data.queued) {
-          msg = data.message || "Fetching leads in background across all markets…";
-          if (statusEl) statusEl.textContent = msg;
-          showToast(msg, "success");
-          let polls = 0;
-          const poll = setInterval(async () => {
-            polls += 1;
-            await loadMiningDashboard();
-            await loadLeads();
-            if (polls >= 6) {
-              clearInterval(poll);
-              if (statusEl) statusEl.textContent = "Background fetch complete — refresh if needed";
-            }
-          }, 15000);
-        } else {
-          const imported = data.imported ?? 0;
-          const raw = data.raw_found ?? 0;
-          msg = data.skipped
-            ? (data.reason || "Skipped")
-            : data.error
-              ? data.error
-              : `Imported ${imported} lead(s) from ${raw} found`;
-          if (statusEl) statusEl.textContent = msg;
-          showToast(msg, data.error ? "error" : "success");
+        const params = new URLSearchParams({ force: "true", batch_size: String(batchSize) });
+        if (reset) params.set("reset", "true");
+        const data = await apiFetch(`/lead-mining/run/${sourceId}?${params}`, { method: "POST" });
+        let msg = data.message || data.error || "Fetch queued";
+        if (statusEl) statusEl.textContent = msg;
+        showToast(msg, data.error ? "error" : "success");
+        let polls = 0;
+        const poll = setInterval(async () => {
+          polls += 1;
           await loadMiningDashboard();
           await loadLeads();
-        }
-        const box = document.getElementById("miningResults");
-        if (box) {
-          box.style.display = "block";
-          box.textContent = JSON.stringify(data, null, 2);
+          const prog = (window.miningProgress || {})[sourceId];
+          if (prog?.complete || polls >= 8) {
+            clearInterval(poll);
+            if (statusEl && prog?.complete) {
+              statusEl.textContent = prog.message || "All leads fetched for this run";
+            }
+          }
+        }, 15000);
+        if (!data.queued) {
+          clearInterval(poll);
+          await loadMiningDashboard();
+          await loadLeads();
         }
       } catch (err) {
         if (statusEl) statusEl.textContent = err.message;
@@ -1948,34 +2004,52 @@
       }
     }
 
+    async function resetAndFetch(sourceId, btn) {
+      try {
+        await apiFetch(`/lead-mining/reset/${sourceId}`, { method: "POST" });
+        await fetchSourceLeads(sourceId, btn, { reset: true, batchSize: 150 });
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    }
+
     async function loadMiningDashboard() {
       try {
         const data = await apiFetch("/lead-mining/dashboard");
+        window.miningProgress = data.progress || {};
         document.getElementById("miningTodayTotal").textContent =
           `Today: ${data.today_total ?? 0} leads · ${data.total_mined ?? 0} total mined`;
         const container = document.getElementById("miningSources");
         const sources = data.sources || [];
+        const progress = data.progress || {};
         if (!sources.length) {
           container.innerHTML = '<div class="mining-source-card"><span class="meta">No sources configured</span></div>';
         } else {
-          container.innerHTML = sources.map((s) => `
+          container.innerHTML = sources.map((s) => {
+            const p = progress[s.id] || {};
+            const hasMore = p.has_more !== false && !p.complete;
+            return `
             <div class="mining-source-card" data-source-id="${escapeHtml(s.id)}">
               <h4>${escapeHtml(s.label || s.id)}</h4>
-              <div class="meta">${escapeHtml(s.schedule || "")}</div>
+              <div class="meta">${escapeHtml(s.schedule || "")} · ${escapeHtml(s.segment ? s.segment.toUpperCase() : "")}</div>
               <div class="today">${s.today_count ?? 0}</div>
               <div class="meta">leads today</div>
+              ${progressHtml(s.id, p)}
               <div class="toggle-row">
                 <span>${s.enabled ? "On" : "Off"}</span>
                 <button type="button" class="btn btn-sm mining-toggle" data-source="${escapeHtml(s.id)}" data-enabled="${s.enabled ? "0" : "1"}">
                   Turn ${s.enabled ? "Off" : "On"}
                 </button>
               </div>
-              <button type="button" class="btn btn-sm btn-primary mining-fetch-btn mining-fetch" data-source="${escapeHtml(s.id)}">
-                Fetch Leads
-              </button>
+              <div class="mining-actions">
+                <button type="button" class="btn btn-sm btn-primary mining-fetch-btn mining-fetch" data-source="${escapeHtml(s.id)}">
+                  ${p.last_run_at && hasMore ? "Fetch More" : "Fetch Batch (150)"}
+                </button>
+                <button type="button" class="btn btn-sm mining-reset" data-source="${escapeHtml(s.id)}">Reset</button>
+              </div>
               <div class="meta mining-fetch-status" id="miningStatus-${escapeHtml(s.id)}" style="margin-top:0.35rem"></div>
-            </div>
-          `).join("");
+            </div>`;
+          }).join("");
           container.querySelectorAll(".mining-toggle").forEach((btn) => {
             btn.addEventListener("click", async () => {
               const sourceId = btn.dataset.source;
@@ -1989,7 +2063,13 @@
             });
           });
           container.querySelectorAll(".mining-fetch").forEach((btn) => {
-            btn.addEventListener("click", () => fetchSourceLeads(btn.dataset.source, btn));
+            btn.addEventListener("click", () => fetchSourceLeads(btn.dataset.source, btn, { batchSize: 150 }));
+          });
+          container.querySelectorAll(".mining-reset").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const fetchBtn = btn.closest(".mining-source-card")?.querySelector(".mining-fetch");
+              resetAndFetch(btn.dataset.source, fetchBtn || btn);
+            });
           });
         }
         miningPipelineCache = data.pipeline || [];
@@ -2008,15 +2088,16 @@
         document.getElementById("hotLeads").textContent = leads.filter((l) => l.score >= 80).length;
         const tbody = document.getElementById("leadsTable");
         if (!leads.length) {
-          tbody.innerHTML = '<tr class="empty-row"><td colspan="9">No leads match your filters</td></tr>';
+          tbody.innerHTML = '<tr class="empty-row"><td colspan="10">No leads match your filters</td></tr>';
           return;
         }
         tbody.innerHTML = leads
           .map(
             (l) => `
           <tr class="lead-row-clickable" data-lead-id="${escapeHtml(l.id)}">
+            <td>${segmentPillHtml(l.lead_segment, l.segment_label)}</td>
             <td>${escapeHtml(l.name || "—")}</td>
-            <td>${escapeHtml(l.phone)}</td>
+            <td>${escapeHtml(l.contact_synthetic ? "—" : l.phone)}${l.contact_synthetic ? ' <span class="meta">(platform)</span>' : ""}</td>
             <td>${escapeHtml(l.origin || "—")} → ${escapeHtml(l.destination || "—")}</td>
             <td>${escapeHtml(formatLeadDates(l))}</td>
             <td>${sourcePillHtml(l.source, l.source_label)}</td>
@@ -2040,7 +2121,7 @@
         document.getElementById("totalLeads").textContent = "—";
         document.getElementById("hotLeads").textContent = "—";
         document.getElementById("leadsTable").innerHTML =
-          `<tr class="empty-row"><td colspan="9">${escapeHtml(err.message)}</td></tr>`;
+          `<tr class="empty-row"><td colspan="10">${escapeHtml(err.message)}</td></tr>`;
       }
     }
 
