@@ -1,21 +1,23 @@
-name: Deploy
+name: Deploy TravelAI Agent
 
 on:
   push:
     branches:
       - main
       - develop
+      - feature/*
   workflow_dispatch:
 
 env:
-  AWS_REGION: me-central-1
-  AWS_DEFAULT_REGION: me-central-1
+  AWS_REGION: ap-south-1
 
 jobs:
   test:
+    name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v6
 
       - uses: actions/setup-python@v5
         with:
@@ -38,66 +40,32 @@ jobs:
           CONVERSATIONS_TABLE: travel-ai-conversations-dev
         run: python -c "from app.main import app; print('OK', app.title)"
 
-  deploy:
+  deploy-backend:
+    name: Deploy Backend (SAM)
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v6
 
-      - name: Verify AWS credentials
-        shell: bash
-        env:
-          RAW_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          RAW_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Setup AWS SAM
+        uses: aws-actions/setup-sam@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: SAM Build
         run: |
-          set -euo pipefail
+          cd infrastructure
+          sam build
 
-          # Strip whitespace/newlines (common when pasting into GitHub Secrets)
-          KEY_ID="$(printf '%s' "${RAW_ACCESS_KEY_ID}" | tr -d '[:space:]')"
-          SECRET="$(printf '%s' "${RAW_SECRET_ACCESS_KEY}" | tr -d '[:space:]')"
-
-          if [[ -z "${KEY_ID}" || -z "${SECRET}" ]]; then
-            echo "::error::GitHub secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are empty."
-            exit 1
-          fi
-
-          echo "Access key prefix: ${KEY_ID:0:4}***"
-          echo "Access key length: ${#KEY_ID} (expected 20 for AKIA keys)"
-          echo "Secret key length: ${#SECRET} (expected 40)"
-
-          if [[ "${#KEY_ID}" -ne 20 ]]; then
-            echo "::error::AWS_ACCESS_KEY_ID length is ${#KEY_ID}, expected 20. Re-paste the key with no spaces."
-            exit 1
-          fi
-          if [[ "${#SECRET}" -ne 40 ]]; then
-            echo "::error::AWS_SECRET_ACCESS_KEY length is ${#SECRET}, expected 40. Re-paste the secret with no spaces."
-            exit 1
-          fi
-          if [[ "${KEY_ID}" != AKIA* ]]; then
-            echo "::error::Access key must start with AKIA (permanent IAM user key)."
-            exit 1
-          fi
-
-          # Clear any org/runner session token — permanent keys must not send one
-          unset AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
-          export AWS_ACCESS_KEY_ID="${KEY_ID}"
-          export AWS_SECRET_ACCESS_KEY="${SECRET}"
-          export AWS_DEFAULT_REGION="${AWS_REGION}"
-          export AWS_REGION="${AWS_REGION}"
-
-          echo "AWS_ACCESS_KEY_ID=${KEY_ID}" >> "$GITHUB_ENV"
-          echo "AWS_SECRET_ACCESS_KEY=${SECRET}" >> "$GITHUB_ENV"
-          echo "AWS_DEFAULT_REGION=${AWS_REGION}" >> "$GITHUB_ENV"
-          echo "AWS_REGION=${AWS_REGION}" >> "$GITHUB_ENV"
-
-          aws sts get-caller-identity
-
-      - uses: aws-actions/setup-sam@v2
-
-      - name: SAM build and deploy
-        working-directory: infrastructure
+      - name: SAM Deploy
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
@@ -113,8 +81,13 @@ jobs:
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
         run: |
-          sam build
-          sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --config-env prod \
+          cd infrastructure
+          sam deploy \
+            --config-env prod \
+            --capabilities CAPABILITY_IAM \
+            --resolve-s3 \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
             --parameter-overrides \
             "Environment=prod \
             OpenAiApiKey=${OPENAI_API_KEY:-} \
@@ -130,3 +103,10 @@ jobs:
             TwilioAccountSid=${TWILIO_ACCOUNT_SID:-} \
             TwilioAuthToken=${TWILIO_AUTH_TOKEN:-} \
             SmtpPassword=${SMTP_PASSWORD:-}"
+
+      - name: Fetch CloudFormation Outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name travel-ai-prod \
+            --query "Stacks[0].Outputs" \
+            --output json
