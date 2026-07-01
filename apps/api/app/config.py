@@ -71,8 +71,8 @@ class Settings(BaseSettings):
     portal_api_key: str = ""
 
     aws_region: str = "ap-south-1"
-    aws_access_key_id: str = "local"
-    aws_secret_access_key: str = "local"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
     dynamodb_endpoint: str = ""  # http://localhost:8001 for local DynamoDB
 
     storage_backend: Literal["dynamo"] = "dynamo"

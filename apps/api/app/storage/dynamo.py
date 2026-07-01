@@ -23,7 +23,11 @@ def _resource():
     kwargs: dict[str, Any] = {"region_name": settings.aws_region}
     if settings.dynamodb_endpoint:
         kwargs["endpoint_url"] = settings.dynamodb_endpoint
-    if settings.aws_access_key_id:
+        key = settings.aws_access_key_id or "local"
+        secret = settings.aws_secret_access_key or "local"
+        kwargs["aws_access_key_id"] = key
+        kwargs["aws_secret_access_key"] = secret
+    elif settings.aws_access_key_id and settings.aws_access_key_id not in ("local", ""):
         kwargs["aws_access_key_id"] = settings.aws_access_key_id
         kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
     return boto3.resource("dynamodb", **kwargs)

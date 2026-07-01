@@ -7,6 +7,7 @@ BUILD="$ROOT/apps/web/build"
 
 mkdir -p "$BUILD"
 cp "$ROOT/apps/web/index.html" "$BUILD/index.html"
+cp "$ROOT/apps/web/airports.js" "$BUILD/airports.js"
 cat > "$BUILD/config.js" <<EOF
 window.__TRAVELAI__ = {
   apiBase: "${API_URL%/}/api/v1",

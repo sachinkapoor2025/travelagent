@@ -447,6 +447,70 @@
       max-height: 220px;
     }
 
+    .airport-field { position: relative; }
+    .airport-suggestions {
+      position: absolute;
+      left: 0; right: 0; top: calc(100% + 4px);
+      z-index: 50;
+      list-style: none;
+      margin: 0; padding: 0;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-lg);
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+    }
+    .airport-suggestions.open { display: block; }
+    .airport-suggestions li {
+      padding: 0.55rem 0.75rem;
+      cursor: pointer;
+      font-size: 0.82rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .airport-suggestions li:hover, .airport-suggestions li.active {
+      background: var(--blue-light);
+    }
+    .airport-suggestions li strong { color: var(--blue-dark); }
+
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 9999;
+      padding: 0.85rem 1.15rem;
+      border-radius: var(--radius-sm);
+      color: #fff;
+      font-size: 0.875rem;
+      font-weight: 500;
+      box-shadow: var(--shadow-lg);
+      animation: toast-in 0.25s ease;
+      max-width: 360px;
+    }
+    .toast.success { background: #15803d; }
+    .toast.error { background: #b91c1c; }
+    .toast.info { background: var(--blue-dark); }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn.loading { position: relative; color: transparent; }
+    .btn.loading::after {
+      content: "";
+      position: absolute;
+      width: 16px; height: 16px;
+      top: 50%; left: 50%;
+      margin: -8px 0 0 -8px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     .status-bar {
       font-size: 0.75rem;
       color: var(--text-muted);
@@ -540,13 +604,15 @@
             </div>
           </div>
           <div class="form-row">
-            <div>
+            <div class="airport-field">
               <label class="field-label">From</label>
-              <input name="origin" placeholder="DXB" />
+              <input name="origin" placeholder="Type city or code e.g. DEL" autocomplete="off" data-airport />
+              <ul class="airport-suggestions"></ul>
             </div>
-            <div>
+            <div class="airport-field">
               <label class="field-label">To</label>
-              <input name="destination" placeholder="MEL" />
+              <input name="destination" placeholder="Type city or code e.g. MEL" autocomplete="off" data-airport />
+              <ul class="airport-suggestions"></ul>
             </div>
           </div>
           <div>
@@ -612,8 +678,8 @@
     <section id="section-flights" class="panel panel-section">
       <div class="panel-header"><h2>Flight Search &amp; Book</h2><span>Live Duffel inventory</span></div>
       <form id="flightSearchForm" class="form-row-4" style="grid-template-columns:repeat(5,1fr) auto">
-        <div><label class="field-label">From</label><input name="origin" value="DXB" required /></div>
-        <div><label class="field-label">To</label><input name="destination" value="BOM" required /></div>
+        <div class="airport-field"><label class="field-label">From</label><input name="origin" value="DXB" required autocomplete="off" data-airport /><ul class="airport-suggestions"></ul></div>
+        <div class="airport-field"><label class="field-label">To</label><input name="destination" value="BOM" required autocomplete="off" data-airport /><ul class="airport-suggestions"></ul></div>
         <div><label class="field-label">Depart</label><input name="departure_date" type="date" required /></div>
         <div><label class="field-label">Pax</label><input name="passengers" type="number" value="1" min="1" /></div>
         <div><label class="field-label">Email (nurture)</label><input name="email" type="email" placeholder="optional" /></div>
@@ -751,9 +817,137 @@
   <footer>TravelAI Agent · Portal guide: docs/PORTAL_GUIDE.md in repo</footer>
 
   <script src="config.js"></script>
+  <script src="airports.js"></script>
   <script>
     const API = (window.__TRAVELAI__ && window.__TRAVELAI__.apiBase) || "/api/v1";
     let chatSessionId = null;
+
+    function showToast(message, type = "info") {
+      const existing = document.querySelector(".toast");
+      if (existing) existing.remove();
+      const el = document.createElement("div");
+      el.className = `toast ${type}`;
+      el.textContent = message;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 4500);
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function normalizePhone(phone, market) {
+      let p = String(phone || "").trim().replace(/[\s-]/g, "");
+      if (!p) return p;
+      if (p.startsWith("+")) return p;
+      if (market === "india" && /^\d{10}$/.test(p)) return "+91" + p;
+      if (market === "uae" && /^0?5\d{8}$/.test(p)) return "+971" + p.replace(/^0/, "");
+      if (/^\d{10,12}$/.test(p)) return "+" + p;
+      return p;
+    }
+
+    function normalizeAirportCode(value) {
+      const v = String(value || "").trim();
+      if (/^[A-Za-z]{3}$/.test(v)) return v.toUpperCase();
+      const matches = window.searchAirports(v, 1);
+      return matches.length ? matches[0].code : v.toUpperCase();
+    }
+
+    async function apiFetch(path, options = {}) {
+      try {
+        const res = await fetch(`${API}${path}`, {
+          headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+          ...options,
+        });
+        let data = {};
+        const text = await res.text();
+        try { data = text ? JSON.parse(text) : {}; } catch { data = { detail: text || `HTTP ${res.status}` }; }
+        if (!res.ok) {
+          const msg = typeof data.detail === "string" ? data.detail
+            : Array.isArray(data.detail) ? data.detail.map((d) => d.msg || d).join(", ")
+            : data.message || `Request failed (${res.status})`;
+          throw new Error(msg);
+        }
+        return data;
+      } catch (err) {
+        if (err.name === "TypeError" && String(err.message).includes("fetch")) {
+          throw new Error("Cannot reach API — check connection or redeploy backend.");
+        }
+        throw err;
+      }
+    }
+
+    function setButtonLoading(btn, loading) {
+      if (!btn) return;
+      btn.disabled = loading;
+      btn.classList.toggle("loading", loading);
+    }
+
+    function initAirportAutocomplete(root = document) {
+      root.querySelectorAll("[data-airport]").forEach((input) => {
+        const list = input.parentElement.querySelector(".airport-suggestions");
+        if (!list) return;
+        let activeIndex = -1;
+
+        function renderSuggestions() {
+          const q = input.value.trim();
+          if (q.length < 1) {
+            list.classList.remove("open");
+            list.innerHTML = "";
+            return;
+          }
+          const matches = window.searchAirports(q, 8);
+          if (!matches.length) {
+            list.classList.remove("open");
+            list.innerHTML = "";
+            return;
+          }
+          list.innerHTML = matches.map((a, i) =>
+            `<li data-code="${a.code}" data-idx="${i}"><strong>${a.code}</strong> — ${a.city}, ${a.country} <span style="color:var(--text-muted)">(${a.name})</span></li>`
+          ).join("");
+          list.classList.add("open");
+          activeIndex = -1;
+        }
+
+        function pick(code) {
+          input.value = code;
+          list.classList.remove("open");
+          list.innerHTML = "";
+          input.dispatchEvent(new Event("change"));
+        }
+
+        input.addEventListener("input", renderSuggestions);
+        input.addEventListener("focus", renderSuggestions);
+        input.addEventListener("blur", () => setTimeout(() => list.classList.remove("open"), 150));
+        input.addEventListener("keydown", (e) => {
+          const items = list.querySelectorAll("li");
+          if (!items.length) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            activeIndex = Math.min(activeIndex + 1, items.length - 1);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            activeIndex = Math.max(activeIndex - 1, 0);
+          } else if (e.key === "Enter" && activeIndex >= 0) {
+            e.preventDefault();
+            pick(items[activeIndex].dataset.code);
+            return;
+          } else if (e.key === "Escape") {
+            list.classList.remove("open");
+            return;
+          } else return;
+          items.forEach((li, i) => li.classList.toggle("active", i === activeIndex));
+        });
+        list.addEventListener("mousedown", (e) => {
+          const li = e.target.closest("li[data-code]");
+          if (li) pick(li.dataset.code);
+        });
+      });
+    }
 
     function scrollToSection(sectionId, focusSelector) {
       const section = document.getElementById(sectionId);
@@ -814,9 +1008,7 @@
 
     async function loadAnalytics() {
       try {
-        const res = await fetch(`${API}/analytics/dashboard`);
-        if (!res.ok) throw new Error("API unavailable");
-        const stats = await res.json();
+        const stats = await apiFetch("/analytics/dashboard");
         document.getElementById("contactRate").textContent =
           stats.contact_rate != null ? stats.contact_rate + "%" : "—";
         document.getElementById("chatSessions").textContent =
@@ -829,21 +1021,19 @@
         );
         document.getElementById("channelStats").innerHTML =
           pills.length ? pills.join("") : '<span class="channel-pill">No channel data yet</span>';
-        setApiStatus("");
-      } catch {
+        setApiStatus(`Connected · ${API}`);
+      } catch (err) {
         document.getElementById("contactRate").textContent = "—";
         document.getElementById("chatSessions").textContent = "—";
         document.getElementById("channelStats").innerHTML =
           '<span class="channel-pill">Connect API to see channel stats</span>';
-        setApiStatus("Backend API not reachable — UI loads but data actions need the API.", true);
+        setApiStatus(err.message || "Backend API not reachable", true);
       }
     }
 
     async function loadLeads() {
       try {
-        const res = await fetch(`${API}/leads`);
-        if (!res.ok) throw new Error("failed");
-        const leads = await res.json();
+        const leads = await apiFetch("/leads");
         document.getElementById("totalLeads").textContent = leads.length;
         document.getElementById("hotLeads").textContent = leads.filter((l) => l.score >= 80).length;
         const tbody = document.getElementById("leadsTable");
@@ -855,35 +1045,41 @@
           .map(
             (l) => `
           <tr>
-            <td>${l.phone}</td>
-            <td>${l.origin || "—"} → ${l.destination || "—"}</td>
+            <td>${escapeHtml(l.phone)}</td>
+            <td>${escapeHtml(l.origin || "—")} → ${escapeHtml(l.destination || "—")}</td>
             <td><span class="badge ${l.score >= 80 ? "hot" : l.score >= 50 ? "warm" : ""}">${l.score}</span> ${l.temperature || ""}</td>
-            <td>${l.status}</td>
-            <td>${l.market}</td>
+            <td>${escapeHtml(l.status)}</td>
+            <td>${escapeHtml(l.market)}</td>
             <td><button class="btn btn-sm" onclick="callLead('${l.id}')">Call</button> <button class="btn btn-sm" onclick="dncLead('${l.id}')">DNC</button></td>
           </tr>`
           )
           .join("");
-      } catch {
+      } catch (err) {
         document.getElementById("totalLeads").textContent = "—";
         document.getElementById("hotLeads").textContent = "—";
         document.getElementById("leadsTable").innerHTML =
-          '<tr class="empty-row"><td colspan="6">Could not load leads — check API connection</td></tr>';
+          `<tr class="empty-row"><td colspan="6">${escapeHtml(err.message)}</td></tr>`;
       }
     }
 
     async function callLead(id) {
-      const res = await fetch(`${API}/leads/${id}/call`, { method: "POST" });
-      const data = await res.json();
-      alert(res.ok ? `Call initiated: ${JSON.stringify(data)}` : data.detail);
+      try {
+        const data = await apiFetch(`/leads/${id}/call`, { method: "POST" });
+        showToast(data.mock ? "Mock call initiated (Vapi key not set)" : "Outbound call started!", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     }
 
     async function dncLead(id) {
       if (!confirm("Add this lead to Do Not Call list?")) return;
-      const res = await fetch(`${API}/leads/${id}/dnc`, { method: "POST" });
-      const data = await res.json();
-      alert(res.ok ? "Added to DNC" : data.detail || "Failed");
-      loadLeads();
+      try {
+        await apiFetch(`/leads/${id}/dnc`, { method: "POST" });
+        showToast("Added to Do Not Call list", "success");
+        loadLeads();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     }
 
     let lastFlightOffers = [];
@@ -1002,27 +1198,47 @@
 
     document.getElementById("leadForm").addEventListener("submit", async (e) => {
       e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
       const fd = new FormData(e.target);
+      const market = fd.get("market");
+      const phone = normalizePhone(fd.get("phone"), market);
       const body = {
-        phone: fd.get("phone"),
+        phone,
         name: fd.get("name") || null,
-        origin: fd.get("origin") || null,
-        destination: fd.get("destination") || null,
+        origin: normalizeAirportCode(fd.get("origin")) || null,
+        destination: normalizeAirportCode(fd.get("destination")) || null,
         departure_date: fd.get("departure_date") || null,
-        market: fd.get("market"),
+        market,
         opt_in_voice: fd.get("opt_in_voice") === "on",
         source: "website",
       };
-      const res = await fetch(`${API}/leads`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        loadLeads();
+      setButtonLoading(btn, true);
+      try {
+        const lead = await apiFetch("/leads", { method: "POST", body: JSON.stringify(body) });
+        await loadLeads();
+        await loadAnalytics();
         e.target.reset();
-        alert("Lead created — AI callback scheduled");
-      } else alert((await res.json()).detail || "Failed to create lead");
+        if (body.opt_in_voice) {
+          try {
+            const call = await apiFetch(`/leads/${lead.id}/call`, { method: "POST" });
+            showToast(
+              call.mock
+                ? `Lead created! Mock AI call queued for ${phone} (add Vapi key for live calls).`
+                : `Lead created — Sarah is calling ${phone} now!`,
+              "success"
+            );
+          } catch (callErr) {
+            showToast(`Lead created, but call failed: ${callErr.message}`, "error");
+          }
+        } else {
+          showToast("Lead created successfully!", "success");
+        }
+        scrollToSection("section-leads");
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        setButtonLoading(btn, false);
+      }
     });
 
     document.getElementById("adForm").addEventListener("submit", async (e) => {
@@ -1091,25 +1307,29 @@
 
     document.getElementById("chatForm").addEventListener("submit", async (e) => {
       e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
       const fd = new FormData(e.target);
-      const msg = fd.get("message");
-      const res = await fetch(`${API}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, session_id: chatSessionId }),
-      });
-      if (!res.ok) {
-        alert("Chat unavailable — check API connection");
-        return;
-      }
-      const data = await res.json();
-      chatSessionId = data.session_id;
+      const msg = String(fd.get("message") || "").trim();
+      if (!msg) return;
       const box = document.getElementById("chatBox");
-      box.innerHTML += `
-        <div class="chat-msg user"><strong>You:</strong> ${msg}</div>
-        <div class="chat-msg bot"><strong>Sarah:</strong> ${data.reply}</div>`;
+      box.innerHTML += `<div class="chat-msg user"><strong>You:</strong> ${escapeHtml(msg)}</div>`;
       box.scrollTop = box.scrollHeight;
       e.target.reset();
+      setButtonLoading(btn, true);
+      try {
+        const data = await apiFetch("/chat", {
+          method: "POST",
+          body: JSON.stringify({ message: msg, session_id: chatSessionId }),
+        });
+        chatSessionId = data.session_id;
+        box.innerHTML += `<div class="chat-msg bot"><strong>Sarah:</strong> ${escapeHtml(data.reply)}</div>`;
+        box.scrollTop = box.scrollHeight;
+      } catch (err) {
+        box.innerHTML += `<div class="chat-msg bot" style="color:#b91c1c"><strong>Error:</strong> ${escapeHtml(err.message)}</div>`;
+        showToast(err.message, "error");
+      } finally {
+        setButtonLoading(btn, false);
+      }
     });
 
     document.getElementById("alertForm").addEventListener("submit", async (e) => {
@@ -1141,6 +1361,7 @@
       if (res.ok) e.target.reset();
     });
 
+    initAirportAutocomplete();
     loadLeads();
     loadAnalytics();
     setInterval(loadLeads, 15000);
