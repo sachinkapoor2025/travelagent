@@ -339,27 +339,63 @@ def parse_flight_selection(message: str, session: dict[str, Any]) -> Optional[in
     offers = session.get("last_search") or []
     if not offers:
         return None
+    subset = offers[:5]
 
-    num = re.search(r"\b(?:option|number|#|flight)?\s*([1-5])\b", lower)
-    if num:
-        idx = int(num.group(1))
-        if 1 <= idx <= len(offers):
-            return idx
+    # Match quoted price e.g. 883
+    for match in re.finditer(r"\b(\d{3,5})\b", lower):
+        target = int(match.group(1))
+        for i, offer in enumerate(subset, start=1):
+            try:
+                if abs(float(offer.get("price") or 0) - target) <= 30:
+                    return i
+            except (TypeError, ValueError):
+                continue
+
+    # Match stop count e.g. "2 stop" — before generic option numbers
+    stop_match = re.search(r"\b(\d+)\s*[-]?\s*stop", lower)
+    if stop_match:
+        want_stops = int(stop_match.group(1))
+        for i, offer in enumerate(subset, start=1):
+            if int(offer.get("stops", -1)) == want_stops:
+                return i
+
+    if re.search(r"\b(cheapest|budget|lowest)\b", lower):
+        cheapest = min(
+            range(len(subset)),
+            key=lambda i: float(subset[i].get("price") or 999999),
+        )
+        return cheapest + 1
 
     if re.search(r"\b(first|1st|direct|non.?stop)\b", lower):
-        for i, offer in enumerate(offers[:5], start=1):
+        for i, offer in enumerate(subset, start=1):
             if offer.get("stops", 99) == 0:
                 return i
         return 1
-    if re.search(r"\b(second|2nd)\b", lower):
-        return 2 if len(offers) >= 2 else 1
-    if re.search(r"\b(third|3rd|cheapest|budget|lowest)\b", lower):
-        cheapest = min(
-            range(len(offers[:5])),
-            key=lambda i: float(offers[i].get("price") or 999999),
-        )
-        return cheapest + 1
-    if has_booking_intent(message) and len(offers) == 1:
+
+    if re.search(r"\b(?:option|number|#)\s*([1-5])\b", lower):
+        idx = int(re.search(r"\b(?:option|number|#)\s*([1-5])\b", lower).group(1))
+        if 1 <= idx <= len(subset):
+            return idx
+
+    if re.search(r"\bbook\s+(?:option\s+)?([1-5])\b", lower):
+        idx = int(re.search(r"\bbook\s+(?:option\s+)?([1-5])\b", lower).group(1))
+        if 1 <= idx <= len(subset):
+            return idx
+
+    # Lone option digit — not when talking about stops
+    if "stop" not in lower:
+        alone = re.search(r"(?:^|\s)([1-5])(?:\s*$|[,.])", lower)
+        if alone:
+            idx = int(alone.group(1))
+            if 1 <= idx <= len(subset):
+                return idx
+
+    if re.search(r"\b(second|2nd)\b", lower) and "stop" not in lower:
+        return 2 if len(subset) >= 2 else 1
+    if re.search(r"\b(third|3rd)\b", lower):
+        return 3 if len(subset) >= 3 else len(subset)
+
+    if has_booking_intent(message) and len(subset) == 1:
         return 1
     return None
 
@@ -440,15 +476,51 @@ def is_language_only(message: str) -> bool:
 
 
 def _extract_contact_fields(message: str, session: dict[str, Any]) -> None:
-    email = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", message)
-    if email:
-        session["email"] = email.group(0)
-    phone = re.search(r"(\+\d{10,15}|\d{10,12})", message.replace(" ", ""))
-    if phone:
-        session["phone"] = phone.group(1) if phone.group(1).startswith("+") else f"+{phone.group(1)}"
-    name_match = re.search(r"(?:name is|my name is|i am|i'm)\s+([A-Za-z\s]{2,40})", message, re.I)
+    text = message.strip()
+
+    email_match = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text)
+    if email_match:
+        session["email"] = email_match.group(0)
+
+    phone_match = re.search(r"(?:\+|=)?(\d{10,15})", text.replace(" ", ""))
+    if phone_match:
+        digits = phone_match.group(1)
+        if digits.startswith("91") and len(digits) >= 12:
+            session["phone"] = f"+{digits}"
+        elif digits.startswith("971"):
+            session["phone"] = f"+{digits}"
+        elif len(digits) == 10:
+            session["phone"] = f"+91{digits}"
+        else:
+            session["phone"] = f"+{digits.lstrip('+')}"
+
+    name_match = re.search(
+        r"(?:name is|my name is|i am|i'm)\s+([A-Za-z][A-Za-z\s'-]{1,40})",
+        text,
+        re.I,
+    )
     if name_match:
         session["passenger_name"] = name_match.group(1).strip().title()
+        return
+
+    # Combined line: "Sachin kapoor +919999598900 email@x.com"
+    remainder = text
+    if email_match:
+        remainder = remainder.replace(email_match.group(0), " ")
+    if phone_match:
+        remainder = re.sub(r"[+=]?\d{10,15}", " ", remainder)
+    remainder = re.sub(r"\s+", " ", remainder).strip(" ,.-=")
+    if remainder and re.match(r"^[A-Za-z][A-Za-z\s'-]{1,40}$", remainder):
+        session["passenger_name"] = remainder.title()
+        return
+
+    # Standalone name while collecting booking details
+    if session.get("booking_step") == "collect_details" and not session.get("passenger_name"):
+        cleaned = re.sub(r"[\w.+-]+@[\w-]+\.[\w.-]+", "", text)
+        cleaned = re.sub(r"[+=]?\d{10,15}", "", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.-=")
+        if cleaned and re.match(r"^[A-Za-z][A-Za-z\s'-]{1,40}$", cleaned):
+            session["passenger_name"] = cleaned.title()
 
 
 def booking_flow_reply(session: dict[str, Any], message: str) -> Optional[str]:
@@ -458,7 +530,12 @@ def booking_flow_reply(session: dict[str, Any], message: str) -> Optional[str]:
         return None
 
     _extract_contact_fields(message, session)
-    selection = parse_flight_selection(message, session)
+
+    already_selected = session.get("selected_offer_index")
+    changing = bool(re.search(r"\b(option|change|instead|cheapest|direct|\d\s*stop|book)\b", message.lower()))
+    selection = None
+    if not already_selected or changing:
+        selection = parse_flight_selection(message, session)
 
     if selection:
         session["selected_offer_index"] = selection

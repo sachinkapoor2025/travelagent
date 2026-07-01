@@ -22,11 +22,17 @@ MINERS = {
 }
 
 
-async def run_source(source_id: str) -> dict[str, Any]:
+async def run_source(source_id: str, force: bool = False) -> dict[str, Any]:
     sources = get_sources()
+    if source_id in {"clay", "apollo"}:
+        return {
+            "source": source_id,
+            "skipped": True,
+            "reason": "Webhook-only source — configure Clay/Apollo to POST to /lead-mining/webhook/" + source_id,
+        }
     if source_id not in MINERS:
         return {"error": f"Unknown source {source_id}"}
-    if not sources.get(source_id, {}).get("enabled", False):
+    if not force and not sources.get(source_id, {}).get("enabled", False):
         return {"skipped": True, "reason": "disabled"}
 
     raw_leads = await MINERS[source_id]()

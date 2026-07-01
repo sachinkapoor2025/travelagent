@@ -1,41 +1,52 @@
 """Ad intelligence — fetch, analyse, generate."""
 
+import logging
+
 from app.routers.auth import admin_required
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.schemas import AdAnalysisRequest, AdAnalysisResponse, GeneratedAdPackage
 from app.services.ad_intelligence import ad_intelligence
 from app.storage.bookings_repo import booking_repo
 
+logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[admin_required()], prefix="/ads", tags=["ads"])
 
 
 @router.post("/analyze", response_model=AdAnalysisResponse)
 async def analyze_ads(payload: AdAnalysisRequest) -> AdAnalysisResponse:
-    result = await ad_intelligence.analyze_route(
-        payload.origin.upper(),
-        payload.destination.upper(),
-        payload.market,
-        payload.platform,
-    )
+    try:
+        result = await ad_intelligence.analyze_route(
+            payload.origin.upper(),
+            payload.destination.upper(),
+            payload.market,
+            payload.platform,
+        )
+    except Exception as exc:
+        logger.exception("Ad analyze failed")
+        raise HTTPException(status_code=503, detail="Ad analysis failed — try again shortly") from exc
 
-    await booking_repo.save_campaign(
-        {
-            "name": f"{payload.origin}-{payload.destination} {payload.platform}",
-            "route_origin": payload.origin.upper(),
-            "route_destination": payload.destination.upper(),
-            "market": payload.market.value,
-            "platform": payload.platform,
-            "status": "analyzed",
-            "competitor_analysis": {
-                "insights": result.competitor_insights,
-                "patterns": result.winning_patterns,
-                "gaps": result.gap_analysis,
-            },
-            "generated_ads": [v.model_dump() for v in result.ad_variants],
-            "generated_package": result.generated_package.model_dump() if result.generated_package else None,
-        }
-    )
+    try:
+        await booking_repo.save_campaign(
+            {
+                "name": f"{payload.origin}-{payload.destination} {payload.platform}",
+                "route_origin": payload.origin.upper(),
+                "route_destination": payload.destination.upper(),
+                "market": payload.market.value,
+                "platform": payload.platform,
+                "status": "analyzed",
+                "competitor_analysis": {
+                    "insights": result.competitor_insights,
+                    "patterns": result.winning_patterns,
+                    "gaps": result.gap_analysis,
+                },
+                "generated_ads": [v.model_dump() for v in result.ad_variants],
+                "generated_package": result.generated_package.model_dump() if result.generated_package else None,
+            }
+        )
+    except Exception:
+        logger.exception("Failed to persist ad campaign — returning analysis anyway")
+
     return result
 
 

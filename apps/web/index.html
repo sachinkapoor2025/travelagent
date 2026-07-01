@@ -688,6 +688,11 @@
       margin-top: 0.5rem;
     }
 
+    .mining-fetch-btn {
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+
     .mining-pipeline {
       width: 100%;
       border-collapse: collapse;
@@ -1570,6 +1575,36 @@
       }
     }
 
+    async function fetchSourceLeads(sourceId, btn) {
+      const statusEl = document.getElementById(`miningStatus-${sourceId}`);
+      setButtonLoading(btn, true);
+      if (statusEl) statusEl.textContent = "Fetching…";
+      try {
+        const data = await apiFetch(`/lead-mining/run/${sourceId}?force=true`, { method: "POST" });
+        const imported = data.imported ?? 0;
+        const raw = data.raw_found ?? 0;
+        const msg = data.skipped
+          ? (data.reason || "Skipped")
+          : data.error
+            ? data.error
+            : `Imported ${imported} lead(s) from ${raw} found`;
+        if (statusEl) statusEl.textContent = msg;
+        showToast(msg, data.error ? "error" : "success");
+        const box = document.getElementById("miningResults");
+        if (box) {
+          box.style.display = "block";
+          box.textContent = JSON.stringify(data, null, 2);
+        }
+        await loadMiningDashboard();
+        await loadLeads();
+      } catch (err) {
+        if (statusEl) statusEl.textContent = err.message;
+        showToast(err.message, "error");
+      } finally {
+        setButtonLoading(btn, false);
+      }
+    }
+
     async function loadMiningDashboard() {
       try {
         const data = await apiFetch("/lead-mining/dashboard");
@@ -1581,7 +1616,7 @@
           container.innerHTML = '<div class="mining-source-card"><span class="meta">No sources configured</span></div>';
         } else {
           container.innerHTML = sources.map((s) => `
-            <div class="mining-source-card">
+            <div class="mining-source-card" data-source-id="${escapeHtml(s.id)}">
               <h4>${escapeHtml(s.label || s.id)}</h4>
               <div class="meta">${escapeHtml(s.schedule || "")}</div>
               <div class="today">${s.today_count ?? 0}</div>
@@ -1592,6 +1627,10 @@
                   Turn ${s.enabled ? "Off" : "On"}
                 </button>
               </div>
+              <button type="button" class="btn btn-sm btn-primary mining-fetch-btn mining-fetch" data-source="${escapeHtml(s.id)}">
+                Fetch Leads
+              </button>
+              <div class="meta mining-fetch-status" id="miningStatus-${escapeHtml(s.id)}" style="margin-top:0.35rem"></div>
             </div>
           `).join("");
           container.querySelectorAll(".mining-toggle").forEach((btn) => {
@@ -1605,6 +1644,9 @@
                 showToast(err.message, "error");
               }
             });
+          });
+          container.querySelectorAll(".mining-fetch").forEach((btn) => {
+            btn.addEventListener("click", () => fetchSourceLeads(btn.dataset.source, btn));
           });
         }
         const tbody = document.getElementById("miningPipelineBody");

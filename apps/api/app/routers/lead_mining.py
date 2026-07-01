@@ -37,8 +37,9 @@ async def toggle_source(source_id: str, enabled: bool = True) -> dict[str, Any]:
 
 
 @router.post("/run/{source_id}")
-async def run_miner(source_id: str) -> dict[str, Any]:
-    return await run_source(source_id)
+async def run_miner(source_id: str, force: bool = True) -> dict[str, Any]:
+    """Run a single miner. Manual portal fetches pass force=True to bypass schedule toggle."""
+    return await run_source(source_id, force=force)
 
 
 @router.post("/run-all")

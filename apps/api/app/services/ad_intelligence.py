@@ -1,6 +1,7 @@
 """AI-powered ad intelligence — 3-stage fetch, analyse, generate pipeline."""
 
 import json
+import logging
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -11,6 +12,7 @@ from app.schemas import AdAnalysisResponse, AdVariant, GeneratedAdPackage
 from app.services.ad_sources import ad_sources
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 AD_GENERATION_PROMPT = """You are a world-class travel advertising strategist targeting UAE + India diaspora travellers.
 Analyse competitor ads and generate a superior travel ad package.
@@ -67,33 +69,57 @@ class AdIntelligenceService:
         )
 
         if self.client:
-            prompt = f"""Route: {origin} to {destination} ({market.value}, {platform})
+            try:
+                prompt = f"""Route: {origin} to {destination} ({market.value}, {platform})
 
 Competitor ads:
 {competitor_text}
 
 {AD_GENERATION_PROMPT}"""
 
-            response = await self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"},
-                temperature=0.7,
-            )
-            data = json.loads(response.choices[0].message.content or "{}")
-            variants = [AdVariant(**v) for v in data.get("ad_variants", [])]
-            pkg_data = data.get("generated_package") or {}
-            generated = GeneratedAdPackage(**pkg_data) if pkg_data.get("hook") else None
-            return AdAnalysisResponse(
-                route=f"{origin}-{destination}",
-                market=market,
-                competitor_insights=data.get("competitor_insights", []),
-                winning_patterns=data.get("winning_patterns", []),
-                gap_analysis=data.get("gap_analysis", []),
-                ad_variants=variants,
-                competitor_ads=competitors[:10],
-                generated_package=generated,
-            )
+                response = await self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"},
+                    temperature=0.7,
+                    timeout=25.0,
+                )
+                data = json.loads(response.choices[0].message.content or "{}")
+                variants: list[AdVariant] = []
+                for item in data.get("ad_variants", []):
+                    try:
+                        variants.append(
+                            AdVariant(
+                                headline=str(item.get("headline", f"{origin}→{destination}")),
+                                description=str(item.get("description", "Book with Sarah AI")),
+                                cta=str(item.get("cta", "Book Now")),
+                                predicted_ctr_score=float(item.get("predicted_ctr_score", 0.7)),
+                                rationale=str(item.get("rationale", "AI-generated")),
+                            )
+                        )
+                    except (TypeError, ValueError):
+                        continue
+                if not variants:
+                    return self._fallback_analysis(origin, destination, market, competitors)
+                pkg_data = data.get("generated_package") or {}
+                generated = None
+                if pkg_data.get("hook"):
+                    try:
+                        generated = GeneratedAdPackage(**pkg_data)
+                    except Exception:
+                        generated = None
+                return AdAnalysisResponse(
+                    route=f"{origin}-{destination}",
+                    market=market,
+                    competitor_insights=data.get("competitor_insights", []) or [],
+                    winning_patterns=data.get("winning_patterns", []) or [],
+                    gap_analysis=data.get("gap_analysis", []) or [],
+                    ad_variants=variants,
+                    competitor_ads=competitors[:10],
+                    generated_package=generated,
+                )
+            except Exception:
+                logger.exception("OpenAI ad analysis failed for %s-%s", origin, destination)
 
         return self._fallback_analysis(origin, destination, market, competitors)
 
