@@ -1754,55 +1754,61 @@
     document.getElementById("hotelSearchForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const res = await fetch(`${API}/hotels/search`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          city: fd.get("city"),
-          check_in: fd.get("check_in"),
-          check_out: fd.get("check_out"),
-          guests: parseInt(fd.get("guests") || "2"),
-          market: "uae",
-        }),
-      });
-      const data = await res.json();
-      const box = document.getElementById("hotelResults");
-      box.style.display = "block";
-      box.textContent = JSON.stringify(data, null, 2);
+      try {
+        const data = await apiFetch("/hotels/search", {
+          method: "POST",
+          body: JSON.stringify({
+            city: fd.get("city"),
+            check_in: fd.get("check_in"),
+            check_out: fd.get("check_out"),
+            guests: parseInt(fd.get("guests") || "2"),
+            market: "uae",
+          }),
+        });
+        const box = document.getElementById("hotelResults");
+        box.style.display = "block";
+        box.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     });
 
     document.getElementById("itineraryForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const res = await fetch(`${API}/itineraries`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          destination: fd.get("destination"),
-          days: parseInt(fd.get("days") || "5"),
-          interests: fd.get("interests"),
-          travelers: 2,
-          market: "uae",
-        }),
-      });
-      const data = await res.json();
-      const box = document.getElementById("itineraryResults");
-      box.style.display = "block";
-      box.textContent = JSON.stringify(data, null, 2);
+      try {
+        const data = await apiFetch("/itineraries", {
+          method: "POST",
+          body: JSON.stringify({
+            destination: fd.get("destination"),
+            days: parseInt(fd.get("days") || "5"),
+            interests: fd.get("interests"),
+            travelers: 2,
+            market: "uae",
+          }),
+        });
+        const box = document.getElementById("itineraryResults");
+        box.style.display = "block";
+        box.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     });
 
     document.getElementById("referralForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const res = await fetch(`${API}/referrals/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: getPhoneFromForm(e.target), name: fd.get("name") }),
-      });
-      const data = await res.json();
-      const box = document.getElementById("referralResults");
-      box.style.display = "block";
-      box.textContent = JSON.stringify(data, null, 2);
+      try {
+        const data = await apiFetch("/referrals/register", {
+          method: "POST",
+          body: JSON.stringify({ phone: getPhoneFromForm(e.target), name: fd.get("name") }),
+        });
+        const box = document.getElementById("referralResults");
+        box.style.display = "block";
+        box.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     });
 
     document.getElementById("leadForm").addEventListener("submit", async (e) => {
@@ -1858,18 +1864,20 @@
       e.preventDefault();
       const fd = new FormData(e.target);
       const body = { origin: fd.get("origin"), destination: fd.get("destination"), market: fd.get("market") };
-      const res = await fetch(`${API}/ads/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      document.getElementById("adCompare").style.display = "grid";
-      document.getElementById("adCompetitors").textContent = JSON.stringify(data.competitor_ads || data.competitor_insights, null, 2);
-      document.getElementById("adGenerated").textContent = JSON.stringify(data.generated_package || data.ad_variants?.[0], null, 2);
-      const box = document.getElementById("adResults");
-      box.style.display = "block";
-      box.textContent = JSON.stringify(data, null, 2);
+      try {
+        const data = await apiFetch("/ads/analyze", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        document.getElementById("adCompare").style.display = "grid";
+        document.getElementById("adCompetitors").textContent = JSON.stringify(data.competitor_ads || data.competitor_insights, null, 2);
+        document.getElementById("adGenerated").textContent = JSON.stringify(data.generated_package || data.ad_variants?.[0], null, 2);
+        const box = document.getElementById("adResults");
+        box.style.display = "block";
+        box.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     });
 
     document.getElementById("miningImportForm").addEventListener("submit", async (e) => {
@@ -1928,11 +1936,14 @@
     });
 
     document.getElementById("listMcpTools").addEventListener("click", async () => {
-      const res = await fetch(`${API}/mcp/tools`);
-      const data = await res.json();
-      const box = document.getElementById("mcpResults");
-      box.style.display = "block";
-      box.textContent = JSON.stringify(data, null, 2);
+      try {
+        const data = await apiFetch("/mcp/tools");
+        const box = document.getElementById("mcpResults");
+        box.style.display = "block";
+        box.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     });
 
     document.getElementById("chatForm").addEventListener("submit", async (e) => {
@@ -1965,19 +1976,22 @@
     document.getElementById("alertForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const res = await fetch(`${API}/price-alerts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: getPhoneFromForm(e.target),
-          origin: fd.get("origin"),
-          destination: fd.get("destination"),
-          departure_date: "2026-08-01",
-          target_price: parseFloat(fd.get("target_price")),
-          market: "uae",
-        }),
-      });
-      alert(res.ok ? "Price alert created!" : (await res.json()).detail || "Failed");
+      try {
+        await apiFetch("/price-alerts", {
+          method: "POST",
+          body: JSON.stringify({
+            phone: getPhoneFromForm(e.target),
+            origin: fd.get("origin"),
+            destination: fd.get("destination"),
+            departure_date: "2026-08-01",
+            target_price: parseFloat(fd.get("target_price")),
+            market: "uae",
+          }),
+        });
+        showToast("Price alert created!", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     });
 
     document.getElementById("whatsappForm").addEventListener("submit", async (e) => {
@@ -1985,10 +1999,13 @@
       const fd = new FormData(e.target);
       const phone = encodeURIComponent(getPhoneFromForm(e.target));
       const text = encodeURIComponent(fd.get("message"));
-      const res = await fetch(`${API}/whatsapp/send?to=${phone}&text=${text}`, { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      alert(res.ok ? "WhatsApp message sent!" : data.detail || "WhatsApp send failed — check API keys");
-      if (res.ok) e.target.reset();
+      try {
+        await apiFetch(`/whatsapp/send?to=${phone}&text=${text}`, { method: "POST" });
+        showToast("WhatsApp message sent!", "success");
+        e.target.reset();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     });
 
     initAirportAutocomplete();
