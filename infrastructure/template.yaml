@@ -104,6 +104,7 @@ Globals:
           - HasDomain
           - !Sub https://${DomainName}
           - !Sub https://${FrontendDistribution.DomainName}
+        ALLOWED_ORIGINS: !Sub https://${FrontendDistribution.DomainName},http://localhost:3000,http://localhost:8000
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
@@ -374,7 +375,11 @@ Resources:
       CorsConfiguration:
         AllowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
         AllowHeaders: ["Content-Type", "Authorization", "X-Session-Id", "X-Referral-Code"]
-        AllowOrigins: ["*"]
+        AllowOrigins:
+          - !Sub https://${FrontendDistribution.DomainName}
+          - http://localhost:3000
+          - http://localhost:8000
+        MaxAge: 3600
       DefaultRouteSettings:
         ThrottlingBurstLimit: 200
         ThrottlingRateLimit: 100

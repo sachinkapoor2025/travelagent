@@ -448,6 +448,25 @@
     }
 
     .airport-field { position: relative; }
+    .phone-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: stretch;
+    }
+    .phone-row .country-code {
+      flex: 0 0 7.5rem;
+      min-width: 7rem;
+      padding: 0.55rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.875rem;
+      background: var(--surface);
+    }
+    .phone-row .phone-local {
+      flex: 1;
+      min-width: 0;
+    }
     .airport-suggestions {
       position: absolute;
       left: 0; right: 0; top: calc(100% + 4px);
@@ -497,7 +516,6 @@
     }
 
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .btn.loading { position: relative; color: transparent; }
     .btn.loading::after {
       content: "";
       position: absolute;
@@ -588,7 +606,22 @@
         <form id="leadForm">
           <div>
             <label class="field-label">Phone</label>
-            <input name="phone" placeholder="+971501234567 or +919876543210" required />
+            <div class="phone-row">
+              <select name="country_code" class="country-code" aria-label="Country code">
+                <option value="+971" selected>🇦🇪 UAE +971</option>
+                <option value="+91">🇮🇳 India +91</option>
+                <option value="+966">🇸🇦 Saudi +966</option>
+                <option value="+974">🇶🇦 Qatar +974</option>
+                <option value="+968">🇴🇲 Oman +968</option>
+                <option value="+973">🇧🇭 Bahrain +973</option>
+                <option value="+965">🇰🇼 Kuwait +965</option>
+                <option value="+1">🇺🇸 US +1</option>
+                <option value="+44">🇬🇧 UK +44</option>
+                <option value="+61">🇦🇺 Australia +61</option>
+                <option value="+65">🇸🇬 Singapore +65</option>
+              </select>
+              <input name="phone_local" class="phone-local" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="501234567" maxlength="12" required autocomplete="tel-national" />
+            </div>
           </div>
           <div class="form-row">
             <div>
@@ -648,7 +681,20 @@
       <form id="whatsappForm" class="form-row-3" style="grid-template-columns: 1fr 2fr auto;">
         <div>
           <label class="field-label">Phone</label>
-          <input name="phone" placeholder="+971501234567" required />
+          <div class="phone-row">
+            <select name="country_code" class="country-code" aria-label="Country code">
+              <option value="+971" selected>🇦🇪 UAE +971</option>
+              <option value="+91">🇮🇳 India +91</option>
+              <option value="+966">🇸🇦 Saudi +966</option>
+              <option value="+974">🇶🇦 Qatar +974</option>
+              <option value="+968">🇴🇲 Oman +968</option>
+              <option value="+973">🇧🇭 Bahrain +973</option>
+              <option value="+965">🇰🇼 Kuwait +965</option>
+              <option value="+1">🇺🇸 US +1</option>
+              <option value="+44">🇬🇧 UK +44</option>
+            </select>
+            <input name="phone_local" class="phone-local" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="501234567" maxlength="12" required />
+          </div>
         </div>
         <div>
           <label class="field-label">Message</label>
@@ -725,7 +771,19 @@
     <section id="section-referrals" class="panel panel-section">
       <div class="panel-header"><h2>Referral Program</h2></div>
       <form id="referralForm" class="form-row-3">
-        <div><label class="field-label">Phone</label><input name="phone" placeholder="+971501234567" required /></div>
+        <div><label class="field-label">Phone</label>
+          <div class="phone-row">
+            <select name="country_code" class="country-code" aria-label="Country code">
+              <option value="+971" selected>🇦🇪 UAE +971</option>
+              <option value="+91">🇮🇳 India +91</option>
+              <option value="+966">🇸🇦 Saudi +966</option>
+              <option value="+974">🇶🇦 Qatar +974</option>
+              <option value="+1">🇺🇸 US +1</option>
+              <option value="+44">🇬🇧 UK +44</option>
+            </select>
+            <input name="phone_local" class="phone-local" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="501234567" maxlength="12" required />
+          </div>
+        </div>
         <div><label class="field-label">Name</label><input name="name" placeholder="Referrer name" /></div>
         <button type="submit" class="btn btn-primary" style="align-self:end">Register Referrer</button>
       </form>
@@ -735,7 +793,19 @@
     <section id="section-mining" class="panel panel-section">
       <div class="panel-header"><h2>Lead Mining · Outbound IVR</h2></div>
       <form id="miningImportForm" class="form-row-3">
-        <div><label class="field-label">Phone</label><input name="phone" placeholder="+971501234567" required /></div>
+        <div><label class="field-label">Phone</label>
+          <div class="phone-row">
+            <select name="country_code" class="country-code" aria-label="Country code">
+              <option value="+971" selected>🇦🇪 UAE +971</option>
+              <option value="+91">🇮🇳 India +91</option>
+              <option value="+966">🇸🇦 Saudi +966</option>
+              <option value="+974">🇶🇦 Qatar +974</option>
+              <option value="+1">🇺🇸 US +1</option>
+              <option value="+44">🇬🇧 UK +44</option>
+            </select>
+            <input name="phone_local" class="phone-local" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="501234567" maxlength="12" required />
+          </div>
+        </div>
         <div><label class="field-label">Name</label><input name="name" placeholder="Lead name" /></div>
         <div><label class="field-label">Destination</label><input name="destination" placeholder="MEL" /></div>
         <button type="submit" class="btn btn-primary" style="align-self:end">Import Lead</button>
@@ -818,6 +888,7 @@
 
   <script src="config.js"></script>
   <script src="airports.js"></script>
+  <script src="phone-codes.js"></script>
   <script>
     const API = (window.__TRAVELAI__ && window.__TRAVELAI__.apiBase) || "/api/v1";
     let chatSessionId = null;
@@ -838,6 +909,40 @@
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+    }
+
+    function getPhoneFromForm(form) {
+      const localEl = form.querySelector('[name="phone_local"]');
+      const codeEl = form.querySelector('[name="country_code"]');
+      if (localEl && codeEl) {
+        const digits = localEl.value.replace(/\D/g, "");
+        if (!digits) return "";
+        return codeEl.value + digits;
+      }
+      return normalizePhone(form.querySelector('[name="phone"]')?.value, "uae");
+    }
+
+    function initPhoneInputs() {
+      document.querySelectorAll('[name="phone_local"]').forEach((input) => {
+        input.addEventListener("input", () => {
+          input.value = input.value.replace(/\D/g, "");
+        });
+        input.addEventListener("keypress", (e) => {
+          if (e.key.length === 1 && !/\d/.test(e.key)) e.preventDefault();
+        });
+      });
+      const leadForm = document.getElementById("leadForm");
+      const marketSelect = leadForm?.querySelector('[name="market"]');
+      const codeSelect = leadForm?.querySelector('[name="country_code"]');
+      if (marketSelect && codeSelect) {
+        marketSelect.addEventListener("change", () => {
+          codeSelect.value = marketSelect.value === "india" ? "+91" : "+971";
+        });
+        codeSelect.addEventListener("change", () => {
+          if (codeSelect.value === "+91") marketSelect.value = "india";
+          else if (codeSelect.value === "+971") marketSelect.value = "uae";
+        });
+      }
     }
 
     function normalizePhone(phone, market) {
@@ -971,14 +1076,14 @@
       btn.addEventListener("click", () => {
         const id = btn.dataset.section;
         const focusMap = {
-          "section-voice": 'input[name="phone"]',
-          "section-whatsapp": 'input[name="phone"]',
+          "section-voice": '[name="phone_local"]',
+          "section-whatsapp": '[name="phone_local"]',
           "section-chat": 'input[name="message"]',
           "section-leads": null,
           "section-flights": 'input[name="origin"]',
           "section-hotels": 'input[name="city"]',
-          "section-booking": 'input[name="phone"]',
-          "section-mining": 'input[name="phone"]',
+          "section-booking": '[name="phone_local"]',
+          "section-mining": '[name="phone_local"]',
           "section-ads": 'input[name="origin"]',
           "section-mcp": null,
         };
@@ -1188,7 +1293,7 @@
       const res = await fetch(`${API}/referrals/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: fd.get("phone"), name: fd.get("name") }),
+        body: JSON.stringify({ phone: getPhoneFromForm(e.target), name: fd.get("name") }),
       });
       const data = await res.json();
       const box = document.getElementById("referralResults");
@@ -1200,8 +1305,12 @@
       e.preventDefault();
       const btn = e.target.querySelector('button[type="submit"]');
       const fd = new FormData(e.target);
+      const phone = getPhoneFromForm(e.target);
+      if (!phone) {
+        showToast("Enter a valid phone number (digits only)", "error");
+        return;
+      }
       const market = fd.get("market");
-      const phone = normalizePhone(fd.get("phone"), market);
       const body = {
         phone,
         name: fd.get("name") || null,
@@ -1266,7 +1375,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify([{
-          phone: fd.get("phone"), name: fd.get("name"), destination: fd.get("destination"),
+          phone: getPhoneFromForm(e.target), name: fd.get("name"), destination: fd.get("destination"),
           source: "manual", opt_in_voice: true, market: "uae",
         }]),
       });
@@ -1339,7 +1448,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: fd.get("phone"),
+          phone: getPhoneFromForm(e.target),
           origin: fd.get("origin"),
           destination: fd.get("destination"),
           departure_date: "2026-08-01",
@@ -1353,7 +1462,7 @@
     document.getElementById("whatsappForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const phone = encodeURIComponent(fd.get("phone"));
+      const phone = encodeURIComponent(getPhoneFromForm(e.target));
       const text = encodeURIComponent(fd.get("message"));
       const res = await fetch(`${API}/whatsapp/send?to=${phone}&text=${text}`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
@@ -1362,6 +1471,7 @@
     });
 
     initAirportAutocomplete();
+    initPhoneInputs();
     loadLeads();
     loadAnalytics();
     setInterval(loadLeads, 15000);

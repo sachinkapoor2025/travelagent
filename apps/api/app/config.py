@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     secret_key: str = "change-me-in-production"
-    allowed_origins: str = "http://localhost:3000,http://localhost:8000"
+    allowed_origins: str = "http://localhost:3000,http://localhost:8000,https://duao2n2qg02hl.cloudfront.net"
 
     openai_api_key: str = ""
 
