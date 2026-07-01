@@ -484,6 +484,9 @@
         <button type="button" class="tag nav-tag" data-section="section-flights">Flights</button>
         <button type="button" class="tag nav-tag" data-section="section-hotels">Hotels</button>
         <button type="button" class="tag nav-tag" data-section="section-booking">Booking</button>
+        <button type="button" class="tag nav-tag" data-section="section-mining">Mining</button>
+        <button type="button" class="tag nav-tag" data-section="section-ads">Ads AI</button>
+        <button type="button" class="tag nav-tag" data-section="section-mcp">MCP</button>
       </nav>
     </div>
   </header>
@@ -618,6 +621,7 @@
       </form>
       <div id="flightResults" class="table-wrap" style="margin-top:1rem;display:none">
         <table><thead><tr><th>Flight</th><th>Price</th><th>Stops</th><th>Action</th></tr></thead><tbody id="flightResultsBody"></tbody></table>
+        <div id="pricePredictor" class="result-box" style="display:none;margin-top:0.75rem"></div>
       </div>
     </section>
 
@@ -662,6 +666,54 @@
       <pre id="referralResults" class="result-box" style="display:none"></pre>
     </section>
 
+    <section id="section-mining" class="panel panel-section">
+      <div class="panel-header"><h2>Lead Mining · Outbound IVR</h2></div>
+      <form id="miningImportForm" class="form-row-3">
+        <div><label class="field-label">Phone</label><input name="phone" placeholder="+971501234567" required /></div>
+        <div><label class="field-label">Name</label><input name="name" placeholder="Lead name" /></div>
+        <div><label class="field-label">Destination</label><input name="destination" placeholder="MEL" /></div>
+        <button type="submit" class="btn btn-primary" style="align-self:end">Import Lead</button>
+      </form>
+      <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button type="button" class="btn btn-sm" id="runOutboundBtn">Run Outbound Campaign</button>
+        <button type="button" class="btn btn-sm" id="runAgenticBtn">Agentic Book Demo</button>
+      </div>
+      <pre id="miningResults" class="result-box" style="display:none"></pre>
+    </section>
+
+    <div class="layout">
+      <section id="section-ads" class="panel panel-section">
+        <div class="panel-header"><h2>Ad Intelligence · AI Generator</h2></div>
+        <form id="adForm" class="form-row-3">
+          <div>
+            <label class="field-label">From</label>
+            <input name="origin" value="DXB" />
+          </div>
+          <div>
+            <label class="field-label">To</label>
+            <input name="destination" value="MEL" />
+          </div>
+          <div>
+            <label class="field-label">Market</label>
+            <select name="market"><option value="uae">UAE</option><option value="india">India</option></select>
+          </div>
+          <button type="submit" class="btn btn-primary">Analyze + Generate</button>
+        </form>
+        <div id="adCompare" style="margin-top:1rem;display:none;grid-template-columns:1fr 1fr;gap:1rem">
+          <pre id="adCompetitors" class="result-box"></pre>
+          <pre id="adGenerated" class="result-box"></pre>
+        </div>
+        <pre id="adResults" class="result-box" style="display:none"></pre>
+      </section>
+
+      <section id="section-mcp" class="panel panel-section">
+        <div class="panel-header"><h2>MCP · External AI Agents</h2></div>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem">Expose TravelAI to ChatGPT, Perplexity, Gemini via MCP-compatible tools.</p>
+        <button type="button" class="btn btn-primary" id="listMcpTools">List MCP Tools</button>
+        <pre id="mcpResults" class="result-box" style="display:none;margin-top:0.75rem"></pre>
+      </section>
+    </div>
+
     <div class="layout">
       <section id="section-booking" class="panel panel-section">
         <div class="panel-header"><h2>Price Alert · Booking</h2></div>
@@ -684,26 +736,7 @@
           </div>
           <button type="submit" class="btn btn-gold">Set Alert</button>
         </form>
-      </section>
 
-      <section class="panel">
-        <div class="panel-header"><h2>Ad Intelligence</h2></div>
-        <form id="adForm" class="form-row-3">
-          <div>
-            <label class="field-label">From</label>
-            <input name="origin" value="DXB" />
-          </div>
-          <div>
-            <label class="field-label">To</label>
-            <input name="destination" value="MEL" />
-          </div>
-          <div>
-            <label class="field-label">Market</label>
-            <select name="market"><option value="uae">UAE</option><option value="india">India</option></select>
-          </div>
-          <button type="submit" class="btn btn-primary">Analyze</button>
-        </form>
-        <pre id="adResults" class="result-box" style="display:none"></pre>
       </section>
     </div>
 
@@ -751,6 +784,9 @@
           "section-flights": 'input[name="origin"]',
           "section-hotels": 'input[name="city"]',
           "section-booking": 'input[name="phone"]',
+          "section-mining": 'input[name="phone"]',
+          "section-ads": 'input[name="origin"]',
+          "section-mcp": null,
         };
         scrollToSection(id, focusMap[id]);
       });
@@ -821,7 +857,7 @@
           <tr>
             <td>${l.phone}</td>
             <td>${l.origin || "—"} → ${l.destination || "—"}</td>
-            <td><span class="badge ${l.score >= 80 ? "hot" : l.score >= 50 ? "warm" : ""}">${l.score}</span></td>
+            <td><span class="badge ${l.score >= 80 ? "hot" : l.score >= 50 ? "warm" : ""}">${l.score}</span> ${l.temperature || ""}</td>
             <td>${l.status}</td>
             <td>${l.market}</td>
             <td><button class="btn btn-sm" onclick="callLead('${l.id}')">Call</button> <button class="btn btn-sm" onclick="dncLead('${l.id}')">DNC</button></td>
@@ -876,7 +912,20 @@
         <tr><td>${o.summary || o.airline}</td><td>${o.currency} ${o.price}</td><td>${o.stops}</td>
         <td><button class="btn btn-sm" onclick="bookFlight(${i})">Book</button></td></tr>`).join("");
       document.getElementById("flightResults").style.display = "block";
+      loadPricePredictor(fd.get("origin"), fd.get("destination"), fd.get("departure_date"));
     });
+
+    async function loadPricePredictor(origin, destination, departure_date) {
+      const box = document.getElementById("pricePredictor");
+      try {
+        const res = await fetch(`${API}/pricing/predict?origin=${origin}&destination=${destination}&departure_date=${departure_date}&market=uae`);
+        const data = await res.json();
+        if (res.ok) {
+          box.style.display = "block";
+          box.innerHTML = `<strong>AI Price Predictor:</strong> ${data.message} <span class="badge ${data.recommendation === 'buy_now' ? 'hot' : ''}">${data.recommendation.replace('_', ' ')}</span> (${data.confidence_pct}% confidence)`;
+        }
+      } catch { box.style.display = "none"; }
+    }
 
     async function bookFlight(index) {
       const offer = lastFlightOffers[index];
@@ -979,17 +1028,63 @@
     document.getElementById("adForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
+      const body = { origin: fd.get("origin"), destination: fd.get("destination"), market: fd.get("market") };
       const res = await fetch(`${API}/ads/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          origin: fd.get("origin"),
-          destination: fd.get("destination"),
-          market: fd.get("market"),
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
+      document.getElementById("adCompare").style.display = "grid";
+      document.getElementById("adCompetitors").textContent = JSON.stringify(data.competitor_ads || data.competitor_insights, null, 2);
+      document.getElementById("adGenerated").textContent = JSON.stringify(data.generated_package || data.ad_variants?.[0], null, 2);
       const box = document.getElementById("adResults");
+      box.style.display = "block";
+      box.textContent = JSON.stringify(data, null, 2);
+    });
+
+    document.getElementById("miningImportForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const res = await fetch(`${API}/lead-mining/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([{
+          phone: fd.get("phone"), name: fd.get("name"), destination: fd.get("destination"),
+          source: "manual", opt_in_voice: true, market: "uae",
+        }]),
+      });
+      const data = await res.json();
+      const box = document.getElementById("miningResults");
+      box.style.display = "block";
+      box.textContent = JSON.stringify(data, null, 2);
+      loadLeads();
+    });
+
+    document.getElementById("runOutboundBtn").addEventListener("click", async () => {
+      const res = await fetch(`${API}/lead-mining/campaign/run`, { method: "POST" });
+      const data = await res.json();
+      const box = document.getElementById("miningResults");
+      box.style.display = "block";
+      box.textContent = JSON.stringify(data, null, 2);
+    });
+
+    document.getElementById("runAgenticBtn").addEventListener("click", async () => {
+      const res = await fetch(`${API}/mcp/agentic/book`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin: "DXB", destination: "BOM", departure_date: "2026-08-15", phone: "+971501234567", market: "uae" }),
+      });
+      const data = await res.json();
+      const box = document.getElementById("miningResults");
+      box.style.display = "block";
+      box.textContent = JSON.stringify(data, null, 2);
+    });
+
+    document.getElementById("listMcpTools").addEventListener("click", async () => {
+      const res = await fetch(`${API}/mcp/tools`);
+      const data = await res.json();
+      const box = document.getElementById("mcpResults");
       box.style.display = "block";
       box.textContent = JSON.stringify(data, null, 2);
     });

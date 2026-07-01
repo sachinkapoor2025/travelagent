@@ -70,7 +70,15 @@ class LeadRepository:
         if not existing:
             record["created_at"] = ts
 
-        record["score"] = _score_from_dict(record)
+        record["score"] = data.get("score") if data.get("score") is not None else _score_from_dict(record)
+        if data.get("temperature"):
+            record["temperature"] = data["temperature"]
+        elif record["score"] >= settings.lead_hot_score_threshold:
+            record["temperature"] = "hot"
+        elif record["score"] >= settings.lead_warm_score_threshold:
+            record["temperature"] = "warm"
+        else:
+            record["temperature"] = "cold"
         if record["score"] >= settings.lead_hot_score_threshold:
             record["status"] = LeadStatus.QUALIFIED.value
 

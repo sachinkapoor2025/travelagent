@@ -10,6 +10,23 @@ from app.models import Market
 
 settings = get_settings()
 
+DNC_PREFIXES_UAE = {"050", "052", "054", "055", "056", "058"}
+DNC_PREFIXES_INDIA = set()
+
+
+async def scrub_dnc(phone: str) -> bool:
+    """Return True if number is on DNC registry."""
+    from app.storage.leads_repo import lead_repo
+
+    if await lead_repo.is_on_dnc(phone):
+        return True
+    normalized = phone.replace(" ", "").replace("-", "")
+    if normalized.startswith("+971") or normalized.startswith("971"):
+        local = normalized.lstrip("+971").lstrip("971")
+        if local[:3] in DNC_PREFIXES_UAE and settings.app_env == "production":
+            pass
+    return False
+
 
 def _parse_time(value: str) -> time:
     hour, minute = value.split(":")

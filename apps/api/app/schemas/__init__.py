@@ -133,12 +133,28 @@ class AdVariant(BaseModel):
     rationale: str
 
 
+class GeneratedAdPackage(BaseModel):
+    hook: str
+    body_copy: str
+    offer_usp: str
+    cta: str
+    target_persona: str
+    visual_description: str
+    headline_ar: str = ""
+    headline_hi: str = ""
+    cta_ar: str = ""
+    cta_hi: str = ""
+
+
 class AdAnalysisResponse(BaseModel):
     route: str
     market: Market
     competitor_insights: List[str]
     winning_patterns: List[str]
     ad_variants: List[AdVariant]
+    gap_analysis: List[str] = []
+    competitor_ads: List[Dict[str, Any]] = []
+    generated_package: Optional[GeneratedAdPackage] = None
 
 
 class WhatsAppWebhookMessage(BaseModel):

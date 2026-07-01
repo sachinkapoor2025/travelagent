@@ -1,8 +1,8 @@
-"""Ad intelligence — DynamoDB."""
+"""Ad intelligence — fetch, analyse, generate."""
 
 from fastapi import APIRouter
 
-from app.schemas import AdAnalysisRequest, AdAnalysisResponse
+from app.schemas import AdAnalysisRequest, AdAnalysisResponse, GeneratedAdPackage
 from app.services.ad_intelligence import ad_intelligence
 from app.storage.bookings_repo import booking_repo
 
@@ -26,11 +26,32 @@ async def analyze_ads(payload: AdAnalysisRequest) -> AdAnalysisResponse:
             "market": payload.market.value,
             "platform": payload.platform,
             "status": "analyzed",
-            "competitor_analysis": {"insights": result.competitor_insights, "patterns": result.winning_patterns},
+            "competitor_analysis": {
+                "insights": result.competitor_insights,
+                "patterns": result.winning_patterns,
+                "gaps": result.gap_analysis,
+            },
             "generated_ads": [v.model_dump() for v in result.ad_variants],
+            "generated_package": result.generated_package.model_dump() if result.generated_package else None,
         }
     )
     return result
+
+
+@router.get("/fetch")
+async def fetch_competitor_ads(origin: str, destination: str, market: str = "uae") -> dict:
+    from app.models import Market
+
+    return await ad_intelligence.fetch_competitor_ads(origin.upper(), destination.upper(), Market(market))
+
+
+@router.post("/generate", response_model=GeneratedAdPackage)
+async def generate_superior_ad(payload: AdAnalysisRequest) -> GeneratedAdPackage:
+    return await ad_intelligence.generate_superior_ad(
+        payload.origin.upper(),
+        payload.destination.upper(),
+        payload.market,
+    )
 
 
 @router.get("/campaigns")
@@ -45,6 +66,7 @@ async def list_campaigns() -> list[dict]:
             "platform": c.get("platform"),
             "status": c.get("status"),
             "top_ad": c.get("generated_ads", [None])[0] if c.get("generated_ads") else None,
+            "generated_package": c.get("generated_package"),
         }
         for c in campaigns
     ]

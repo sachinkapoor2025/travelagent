@@ -13,10 +13,10 @@ from app.services.session import session_store
 from app.storage.bookings_repo import booking_repo
 
 LANGUAGE_VOICES = {
-    "en": "21m00Tcm4TlvDq8ikWAM",
-    "ar": "VR6AewLTigWG4xSOukaG",
-    "hi": "pNInz6obpgDQGcFmaJgB",
-    "ur": "pNInz6obpgDQGcFmaJgB",
+    "en": "EXAVITQu4vr4xnSDxMaL",
+    "ar": "jBpfuIE2acCO8z3wKNLl",
+    "hi": "cgSgspJ2msm6clMCkdW9",
+    "ur": "cgSgspJ2msm6clMCkdW9",
 }
 
 TRANSCRIBER_LANG = {"en": "en", "ar": "ar", "hi": "hi", "ur": "ur"}

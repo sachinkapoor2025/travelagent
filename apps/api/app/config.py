@@ -58,6 +58,14 @@ class Settings(BaseSettings):
 
     serpapi_key: str = ""
 
+    clay_webhook_secret: str = ""
+    apollo_api_key: str = ""
+    elevenlabs_api_key: str = ""
+    deepgram_api_key: str = ""
+    deepgram_model: str = "nova-2"
+    pricing_margin_pct: float = 2.0
+    mcp_api_key: str = ""
+
     user_pool_id: str = ""
     user_pool_client_id: str = ""
     portal_api_key: str = ""

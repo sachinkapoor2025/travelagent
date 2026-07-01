@@ -1,15 +1,27 @@
-"""AI-powered ad intelligence and competitor analysis."""
+"""AI-powered ad intelligence — 3-stage fetch, analyse, generate pipeline."""
 
+import json
 from typing import Any
 
-import httpx
 from openai import AsyncOpenAI
 
 from app.config import get_settings
 from app.models import Market
-from app.schemas import AdAnalysisResponse, AdVariant
+from app.schemas import AdAnalysisResponse, AdVariant, GeneratedAdPackage
+from app.services.ad_sources import ad_sources
 
 settings = get_settings()
+
+AD_GENERATION_PROMPT = """You are a world-class travel advertising strategist targeting UAE + India diaspora travellers.
+Analyse competitor ads and generate a superior travel ad package.
+
+Return JSON with:
+- competitor_insights: list of 5 insights
+- winning_patterns: list of 5 patterns
+- gap_analysis: list of 3 gaps competitors miss
+- ad_variants: list of 5 objects with headline, description, cta, predicted_ctr_score (0-1), rationale
+- generated_package: object with hook, body_copy, offer_usp, cta, target_persona, visual_description,
+  headline_ar, headline_hi, cta_ar, cta_hi"""
 
 
 class AdIntelligenceService:
@@ -17,42 +29,31 @@ class AdIntelligenceService:
         self.client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 
     async def analyze_route(self, origin: str, destination: str, market: Market, platform: str = "google") -> AdAnalysisResponse:
-        competitors = await self._fetch_competitor_ads(origin, destination, market)
-        return await self._generate_ad_variants(origin, destination, market, platform, competitors)
+        fetched = await ad_sources.fetch_all(origin, destination, market)
+        competitors = fetched.get("ads", [])
+        return await self._analyze_and_generate(origin, destination, market, platform, competitors)
 
-    async def _fetch_competitor_ads(self, origin: str, destination: str, market: Market) -> list[dict[str, Any]]:
-        query = f"flights from {origin} to {destination}"
-        if settings.serpapi_key:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    "https://serpapi.com/search",
-                    params={
-                        "engine": "google",
-                        "q": query,
-                        "api_key": settings.serpapi_key,
-                        "gl": "ae" if market == Market.UAE else "in",
-                        "hl": "en",
-                    },
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    ads = data.get("ads", []) + data.get("shopping_results", [])
-                    return [{"title": a.get("title"), "description": a.get("description"), "link": a.get("link")} for a in ads[:10]]
+    async def fetch_competitor_ads(self, origin: str, destination: str, market: Market) -> dict[str, Any]:
+        return await ad_sources.fetch_all(origin, destination, market)
 
-        return self._mock_competitor_ads(origin, destination, market)
+    async def generate_superior_ad(self, origin: str, destination: str, market: Market) -> GeneratedAdPackage:
+        analysis = await self.analyze_route(origin, destination, market)
+        if analysis.generated_package:
+            return analysis.generated_package
+        return GeneratedAdPackage(
+            hook=f"Fly {origin}→{destination} smarter with Sarah AI",
+            body_copy="Skip the search chaos. Our AI finds the best fare in 60 seconds.",
+            offer_usp="Best price guarantee + free date change on select airlines",
+            cta="Book with Sarah",
+            target_persona="UAE/India diaspora booking international flights",
+            visual_description=f"Split screen: {origin} skyline and {destination} landmark with Sarah AI chat overlay",
+            headline_ar="احجز رحلتك بأفضل سعر",
+            headline_hi="सबसे सस्ता टिकट — AI से बुक करें",
+            cta_ar="احجز الآن",
+            cta_hi="अभी बुक करें",
+        )
 
-    def _mock_competitor_ads(self, origin: str, destination: str, market: Market) -> list[dict[str, Any]]:
-        currency = "AED" if market == Market.UAE else "₹"
-        price = "999" if market == Market.UAE else "29,999"
-        return [
-            {"title": f"Flights {origin} to {destination} from {currency}{price}", "description": "Book now. Free cancellation on select fares.", "link": "https://example.com/1"},
-            {"title": f"Cheap flights to {destination} | Best deals", "description": "Compare 500+ airlines. Instant confirmation.", "link": "https://example.com/2"},
-            {"title": f"{destination} flights — Limited seats", "description": "Hurry! Prices rising. Book today save 20%.", "link": "https://example.com/3"},
-            {"title": f"Direct flights {origin} → {destination}", "description": "Emirates, Qatar, IndiGo. Best price guarantee.", "link": "https://example.com/4"},
-            {"title": f"Plan your {destination} trip", "description": "Flights + hotels + visa assistance. One stop shop.", "link": "https://example.com/5"},
-        ]
-
-    async def _generate_ad_variants(
+    async def _analyze_and_generate(
         self,
         origin: str,
         destination: str,
@@ -61,37 +62,37 @@ class AdIntelligenceService:
         competitors: list[dict[str, Any]],
     ) -> AdAnalysisResponse:
         competitor_text = "\n".join(
-            f"- {c.get('title', 'N/A')}: {c.get('description', 'N/A')}" for c in competitors
+            f"[{c.get('source', '?')}] {c.get('advertiser', 'Unknown')}: {c.get('headline', c.get('title', 'N/A'))} — {c.get('body', c.get('description', ''))}"
+            for c in competitors[:20]
         )
 
         if self.client:
-            prompt = f"""Analyze these competitor travel ads for route {origin} to {destination} ({market.value} market, {platform}):
+            prompt = f"""Route: {origin} to {destination} ({market.value}, {platform})
 
+Competitor ads:
 {competitor_text}
 
-Return JSON with:
-1. competitor_insights: list of 5 insights
-2. winning_patterns: list of 5 patterns that drive clicks in travel
-3. ad_variants: list of 5 ad objects with headline, description, cta, predicted_ctr_score (0-1), rationale
-
-Optimize for {market.value} audience. Use urgency, price anchoring, trust signals. Headlines max 30 chars for Google."""
+{AD_GENERATION_PROMPT}"""
 
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
-                temperature=0.8,
+                temperature=0.7,
             )
-            import json
-
             data = json.loads(response.choices[0].message.content or "{}")
             variants = [AdVariant(**v) for v in data.get("ad_variants", [])]
+            pkg_data = data.get("generated_package") or {}
+            generated = GeneratedAdPackage(**pkg_data) if pkg_data.get("hook") else None
             return AdAnalysisResponse(
                 route=f"{origin}-{destination}",
                 market=market,
                 competitor_insights=data.get("competitor_insights", []),
                 winning_patterns=data.get("winning_patterns", []),
+                gap_analysis=data.get("gap_analysis", []),
                 ad_variants=variants,
+                competitor_ads=competitors[:10],
+                generated_package=generated,
             )
 
         return self._fallback_analysis(origin, destination, market, competitors)
@@ -100,19 +101,44 @@ Optimize for {market.value} audience. Use urgency, price anchoring, trust signal
         self, origin: str, destination: str, market: Market, competitors: list[dict[str, Any]]
     ) -> AdAnalysisResponse:
         currency = "AED" if market == Market.UAE else "₹"
+        base = self._fallback_analysis_legacy(origin, destination, market, competitors)
+        base.competitor_ads = competitors[:10]
+        base.gap_analysis = [
+            "No competitor emphasizes AI voice booking in Arabic/Hindi",
+            "Payment localization (UPI/RuPay) underused in headlines",
+            "Post-booking disruption support missing from competitor copy",
+        ]
+        base.generated_package = GeneratedAdPackage(
+            hook=f"{origin}→{destination} — Sarah finds your fare in 60 sec",
+            body_copy=f"Beat every OTA price from {currency}899. AI assistant in English, Arabic, Hindi.",
+            offer_usp="Live Duffel inventory + instant WhatsApp booking link",
+            cta="Talk to Sarah",
+            target_persona=f"{market.value.upper()} diaspora flying {origin}-{destination}",
+            visual_description="Female AI travel agent on phone with flight map overlay",
+            headline_ar="سفر ذكي بأفضل الأسعار",
+            headline_hi="AI से सस्ती उड़ान बुक करें",
+            cta_ar="اتصل الآن",
+            cta_hi="अभी कॉल करें",
+        )
+        return base
+
+    def _fallback_analysis_legacy(
+        self, origin: str, destination: str, market: Market, competitors: list[dict[str, Any]]
+    ) -> AdAnalysisResponse:
+        currency = "AED" if market == Market.UAE else "₹"
         return AdAnalysisResponse(
             route=f"{origin}-{destination}",
             market=market,
             competitor_insights=[
                 "Price-led headlines dominate SERP for this route",
-                "Urgency messaging ('limited seats') appears in 60% of top ads",
+                "Urgency messaging appears in 60% of top ads",
                 "Free cancellation is a common trust signal",
                 "Direct flight emphasis wins for business travelers",
-                "Bundle offers (flight+hotel) appear for leisure destinations",
+                "Bundle offers appear for leisure destinations",
             ],
             winning_patterns=[
                 "Specific price anchor in headline",
-                "Route clarity (DXB → MEL not just 'Melbourne')",
+                f"Route clarity ({origin} → {destination})",
                 "Urgency without being spammy",
                 "Trust badge (IATA, secure booking)",
                 "Localized currency and payment methods",
@@ -120,38 +146,38 @@ Optimize for {market.value} audience. Use urgency, price anchoring, trust signal
             ad_variants=[
                 AdVariant(
                     headline=f"{origin}→{destination} from {currency}899",
-                    description=f"Direct & 1-stop flights. Amex, RuPay, UPI accepted. Book in 2 mins with AI assistant.",
+                    description="Direct & 1-stop flights. Amex, RuPay, UPI. Book in 2 mins with AI.",
                     cta="Book Now",
                     predicted_ctr_score=0.82,
-                    rationale="Price anchor + payment localization beats generic competitors",
+                    rationale="Price anchor + payment localization",
                 ),
                 AdVariant(
-                    headline=f"Fly {destination} — Save 20% Today",
-                    description="AI finds cheapest fares instantly. Free date change on select airlines.",
+                    headline=f"Fly {destination} — Save 20%",
+                    description="AI finds cheapest fares. Free date change on select airlines.",
                     cta="Search Flights",
                     predicted_ctr_score=0.78,
-                    rationale="Discount framing + AI differentiation",
+                    rationale="Discount + AI differentiation",
                 ),
                 AdVariant(
                     headline=f"Direct Flights {origin} {destination}",
-                    description="Emirates, Qatar, IndiGo compared. Instant confirmation. 24/7 AI booking.",
+                    description="Emirates, Qatar, IndiGo compared. 24/7 AI booking.",
                     cta="Compare Fares",
                     predicted_ctr_score=0.75,
-                    rationale="Direct flight intent match for high-intent searchers",
+                    rationale="Direct flight intent match",
                 ),
                 AdVariant(
-                    headline=f"{destination} Tickets — Last Seats",
-                    description=f"Prices from {currency}899. Secure checkout. Call our AI agent or book online.",
+                    headline=f"{destination} — Last Seats",
+                    description=f"From {currency}899. Secure checkout. Call Sarah AI.",
                     cta="Grab Deal",
                     predicted_ctr_score=0.71,
-                    rationale="Scarcity + omnichannel (call + online)",
+                    rationale="Scarcity + omnichannel",
                 ),
                 AdVariant(
                     headline=f"Smart Travel to {destination}",
-                    description="Tell our AI your dates — get 3 best options in 60 seconds. UAE & India support.",
+                    description="3 best options in 60 seconds. Arabic, Hindi, English support.",
                     cta="Talk to Sarah",
                     predicted_ctr_score=0.69,
-                    rationale="AI-first positioning differentiates from OTAs",
+                    rationale="Multilingual AI moat",
                 ),
             ],
         )

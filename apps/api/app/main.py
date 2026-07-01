@@ -18,9 +18,12 @@ from app.routers import (
     health,
     hotels,
     itineraries,
+    lead_mining,
     leads,
+    mcp,
     payments,
     price_alerts,
+    pricing,
     referrals,
     sms,
     voice,
@@ -71,6 +74,9 @@ app.include_router(analytics.router, prefix=API_PREFIX)
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(webhooks.router, prefix=API_PREFIX)
 app.include_router(sms.router, prefix=API_PREFIX)
+app.include_router(lead_mining.router, prefix=API_PREFIX)
+app.include_router(pricing.router, prefix=API_PREFIX)
+app.include_router(mcp.router, prefix=API_PREFIX)
 
 
 @app.get("/")
@@ -82,21 +88,31 @@ async def root():
         "markets": ["uae", "india"],
         "features": [
             "voice_agent",
+            "multilingual_voice",
             "whatsapp",
+            "whatsapp_booking",
             "web_chat",
+            "agentic_booking",
             "sms",
             "lead_engine",
+            "lead_mining",
+            "outbound_ivr",
             "meta_google_webhooks",
             "booking",
             "hotels",
             "packages",
             "itineraries",
             "price_alerts",
+            "price_predictor",
+            "dynamic_pricing",
             "referrals",
             "payments",
             "ad_intelligence",
+            "ai_ad_generator",
             "analytics",
             "email_nurture",
+            "mcp_server",
+            "self_healing_itinerary",
         ],
     }
 

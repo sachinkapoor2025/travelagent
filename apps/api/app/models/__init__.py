@@ -29,6 +29,10 @@ class LeadSource(str, enum.Enum):
     REFERRAL = "referral"
     ABANDONED_SEARCH = "abandoned_search"
     PARTNER = "partner"
+    CLAY = "clay"
+    APOLLO = "apollo"
+    LINKEDIN = "linkedin"
+    MANUAL = "manual"
 
 
 class CallDirection(str, enum.Enum):

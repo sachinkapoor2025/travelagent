@@ -3,6 +3,7 @@
 import logging
 
 from app.config import get_settings
+from app.services.compliance import scrub_dnc
 from app.services.voice import initiate_outbound_call
 from app.storage.leads_repo import lead_repo
 
@@ -15,20 +16,25 @@ async def process_hot_leads() -> dict:
     processed = 0
 
     for lead in leads:
-        if lead.get("status") not in {"new", "contacted"}:
+        if lead.get("status") not in {"new", "contacted", "qualified"}:
             continue
-        logger.info("Processing lead %s score=%s", lead["id"], lead["score"])
+        on_dnc = await scrub_dnc(lead["phone"])
+        if on_dnc:
+            continue
+        logger.info("Processing lead %s score=%s temp=%s", lead["id"], lead["score"], lead.get("temperature"))
         result = await initiate_outbound_call(
             lead["phone"],
             {
                 "lead_id": lead["id"],
                 "opt_in_voice": lead.get("opt_in_voice", False),
-                "on_dnc": False,
+                "on_dnc": on_dnc,
                 "origin": lead.get("origin"),
                 "destination": lead.get("destination"),
                 "departure_date": lead.get("departure_date"),
                 "passengers": lead.get("passengers", 1),
                 "market": lead.get("market", "uae"),
+                "preferred_language": lead.get("preferred_language", "en"),
+                "temperature": lead.get("temperature", "hot"),
             },
         )
         if result.get("success"):
