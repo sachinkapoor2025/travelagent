@@ -43,7 +43,10 @@ class LeadRepository:
         store = leads_store()
         phone = data["phone"]
         existing = store.query_gsi1(f"PHONE#{phone}", limit=1)
-        lead_id = existing[0].get("id") if existing else str(uuid.uuid4())
+        if existing:
+            lead_id = existing[0].get("lead_id") or existing[0].get("id") or str(uuid.uuid4())
+        else:
+            lead_id = str(uuid.uuid4())
         ts = now_iso()
 
         record = {
@@ -83,7 +86,13 @@ class LeadRepository:
             record["status"] = LeadStatus.QUALIFIED.value
 
         store.put(f"LEAD#{lead_id}", "METADATA", record, gsi1pk="LEADS", gsi1sk=f"{record['score']:03d}#{ts}")
-        store.put(f"LEAD#{lead_id}", "METADATA", record, gsi1pk=f"PHONE#{phone}", gsi1sk=lead_id)
+        store.put(
+            f"PHONE#{phone}",
+            f"LEAD#{lead_id}",
+            {"lead_id": lead_id, "phone": phone},
+            gsi1pk=f"PHONE#{phone}",
+            gsi1sk=lead_id,
+        )
         return _dict_to_lead(record)
 
     async def list_leads(self, status: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
@@ -99,7 +108,15 @@ class LeadRepository:
 
     async def list_by_phone(self, phone: str) -> list[dict[str, Any]]:
         items = leads_store().query_gsi1(f"PHONE#{phone}", limit=5)
-        return [_dict_to_lead(i) for i in items]
+        leads: list[dict[str, Any]] = []
+        for item in items:
+            lead_id = item.get("lead_id") or item.get("id")
+            if not lead_id:
+                continue
+            lead = await self.get_by_id(str(lead_id))
+            if lead:
+                leads.append(lead)
+        return leads
 
     async def get_hot_leads(self, limit: int = 10) -> list[dict[str, Any]]:
         leads = await self.list_leads(limit=100)

@@ -2,22 +2,20 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from typing import Optional
 
-from app.config import get_settings
-from app.models import LeadSource, LeadStatus
+from app.models import LeadStatus
 from app.schemas import LeadCreate, LeadResponse
 from app.services.compliance import detect_market_from_phone
 from app.services.voice import initiate_outbound_call
 from app.storage.leads_repo import lead_repo
 
 router = APIRouter(prefix="/leads", tags=["leads"])
-settings = get_settings()
 
 
 @router.post("", response_model=LeadResponse, status_code=201)
-async def create_lead(payload: LeadCreate, background_tasks: BackgroundTasks) -> LeadResponse:
+async def create_lead(payload: LeadCreate) -> LeadResponse:
     data = payload.model_dump()
     if data.get("metadata"):
         data["metadata_json"] = data.pop("metadata")
@@ -25,10 +23,6 @@ async def create_lead(payload: LeadCreate, background_tasks: BackgroundTasks) ->
         data["market"] = detect_market_from_phone(payload.phone).value
 
     lead = await lead_repo.create_or_update(data)
-
-    if payload.opt_in_voice or payload.phone in settings.twilio_whitelist:
-        background_tasks.add_task(_trigger_callback, lead)
-
     return LeadResponse(**lead)
 
 
@@ -81,22 +75,3 @@ async def add_to_dnc(lead_id: UUID) -> dict:
     await lead_repo.update_status(str(lead_id), LeadStatus.DNC.value)
     return {"status": "added_to_dnc", "phone": lead["phone"]}
 
-
-async def _trigger_callback(lead: dict) -> None:
-    import asyncio
-
-    await asyncio.sleep(settings.lead_callback_delay_seconds)
-    await initiate_outbound_call(
-        lead["phone"],
-        {
-            "lead_id": lead["id"],
-            "opt_in_voice": lead.get("opt_in_voice", False),
-            "on_dnc": False,
-            "origin": lead.get("origin"),
-            "destination": lead.get("destination"),
-            "departure_date": lead.get("departure_date"),
-            "passengers": lead.get("passengers", 1),
-            "market": lead.get("market", "uae"),
-            "source": LeadSource.WEBSITE.value,
-        },
-    )
