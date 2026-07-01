@@ -1,25 +1,33 @@
-"""Lead scoring and pipeline management."""
+"""Lead scoring and pipeline classification — DynamoDB-only."""
 
 from datetime import datetime, timezone
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any
 
 from app.config import get_settings
-from app.models import Lead, LeadSource, LeadStatus, Market
+from app.models import LeadSource, Market
 
 settings = get_settings()
 
 
-def calculate_lead_score(lead: Lead) -> int:
+def calculate_lead_score(lead: Any) -> int:
     score = 0
 
-    if lead.destination and lead.origin:
+    origin = getattr(lead, "origin", None) or (lead.get("origin") if isinstance(lead, dict) else None)
+    destination = getattr(lead, "destination", None) or (lead.get("destination") if isinstance(lead, dict) else None)
+    departure_date = getattr(lead, "departure_date", None) or (lead.get("departure_date") if isinstance(lead, dict) else None)
+    passengers = getattr(lead, "passengers", 1) or (lead.get("passengers", 1) if isinstance(lead, dict) else 1)
+    budget_max = getattr(lead, "budget_max", None) or (lead.get("budget_max") if isinstance(lead, dict) else None)
+    cabin_class = getattr(lead, "cabin_class", None) or (lead.get("cabin_class") if isinstance(lead, dict) else None)
+    source = getattr(lead, "source", None) or (lead.get("source") if isinstance(lead, dict) else None)
+    opt_in_voice = getattr(lead, "opt_in_voice", False) or (lead.get("opt_in_voice", False) if isinstance(lead, dict) else False)
+    market = getattr(lead, "market", None) or (lead.get("market") if isinstance(lead, dict) else None)
+
+    if destination and origin:
         score += 25
-    if lead.departure_date:
+    if departure_date:
         score += 20
         try:
-            dep = datetime.strptime(lead.departure_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            dep = datetime.strptime(str(departure_date), "%Y-%m-%d").replace(tzinfo=timezone.utc)
             days_until = (dep - datetime.now(timezone.utc)).days
             if 0 <= days_until <= 14:
                 score += 25
@@ -27,17 +35,23 @@ def calculate_lead_score(lead: Lead) -> int:
                 score += 15
         except ValueError:
             pass
-    if lead.passengers and lead.passengers > 1:
+    if passengers and int(passengers) > 1:
         score += 5
-    if lead.budget_max and lead.budget_max >= 5000:
+    if budget_max and float(budget_max) >= 5000:
         score += 10
-    if lead.cabin_class and lead.cabin_class.lower() in {"business", "first"}:
+    if cabin_class and str(cabin_class).lower() in {"business", "first"}:
         score += 15
-    if lead.source in {LeadSource.GOOGLE_ADS, LeadSource.WEBSITE, LeadSource.ABANDONED_SEARCH}:
+
+    high_intent_sources = {LeadSource.GOOGLE_ADS, LeadSource.WEBSITE, LeadSource.ABANDONED_SEARCH}
+    if isinstance(source, LeadSource) and source in high_intent_sources:
         score += 10
-    if lead.opt_in_voice:
+    elif isinstance(source, str) and source in {s.value for s in high_intent_sources}:
+        score += 10
+
+    if opt_in_voice:
         score += 5
-    if lead.market == Market.UAE:
+
+    if market == Market.UAE or market == Market.UAE.value or market == "uae":
         score += 5
 
     return min(score, 100)
@@ -49,23 +63,3 @@ def classify_lead(score: int) -> str:
     if score >= settings.lead_warm_score_threshold:
         return "warm"
     return "cold"
-
-
-async def create_or_update_lead(db: AsyncSession, data: dict) -> Lead:
-    phone = data["phone"]
-    result = await db.execute(select(Lead).where(Lead.phone == phone).order_by(Lead.created_at.desc()))
-    lead = result.scalars().first()
-
-    if lead:
-        for key, value in data.items():
-            if value is not None and hasattr(lead, key):
-                setattr(lead, key, value)
-    else:
-        lead = Lead(**{k: v for k, v in data.items() if hasattr(Lead, k)})
-        db.add(lead)
-
-    lead.score = calculate_lead_score(lead)
-    if lead.score >= settings.lead_hot_score_threshold:
-        lead.status = LeadStatus.QUALIFIED
-    await db.flush()
-    return lead
