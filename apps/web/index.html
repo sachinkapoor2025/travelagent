@@ -764,13 +764,22 @@
       </div>
 
       <div id="authConfirm" class="auth-panel">
+        <p style="font-size:0.82rem;color:var(--text-muted);margin:-0.5rem 0 0.85rem">
+          Code emails come from <strong>no-reply@verificationemail.com</strong> — check spam. If nothing arrives, activate with your password below.
+        </p>
         <form id="confirmForm">
           <label for="confirmEmail">Email</label>
           <input id="confirmEmail" name="email" type="email" placeholder="you@company.com" autocomplete="email" required />
           <label for="confirmCode">Confirmation Code</label>
-          <input id="confirmCode" name="code" type="text" placeholder="6-digit code from email" inputmode="numeric" required />
+          <input id="confirmCode" name="code" type="text" placeholder="6-digit code from email" inputmode="numeric" />
           <button type="submit" class="btn btn-primary" style="width:100%;margin-top:0.5rem">Confirm &amp; Activate</button>
           <button type="button" class="btn btn-sm" id="resendCodeBtn" style="width:100%;margin-top:0.5rem">Resend Code</button>
+        </form>
+        <hr style="margin:1rem 0;border:none;border-top:1px solid var(--border)" />
+        <form id="activateForm">
+          <label for="activatePassword">Password (no code needed)</label>
+          <input id="activatePassword" name="password" type="password" placeholder="Same password you registered with" autocomplete="current-password" required />
+          <button type="submit" class="btn btn-primary" style="width:100%;margin-top:0.5rem">Activate Without Email Code</button>
         </form>
       </div>
     </div>
@@ -1285,15 +1294,44 @@
     document.getElementById("confirmForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
+      const code = String(fd.get("code") || "").trim();
+      if (!code) {
+        showLogin("Enter the 6-digit code, or use Activate Without Email Code below");
+        return;
+      }
       try {
         const res = await fetch(`${API}/auth/confirm`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: fd.get("email"), code: fd.get("code") }),
+          body: JSON.stringify({ email: fd.get("email"), code }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Confirmation failed");
         document.getElementById("loginEmail").value = fd.get("email");
+        switchAuthTab("signin");
+        showLogin("", data.message || "Account activated — sign in below");
+      } catch (err) {
+        showLogin(err.message);
+      }
+    });
+
+    document.getElementById("activateForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("confirmEmail").value.trim();
+      const password = document.getElementById("activatePassword").value;
+      if (!email) {
+        showLogin("Enter your email above first");
+        return;
+      }
+      try {
+        const res = await fetch(`${API}/auth/activate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Activation failed");
+        document.getElementById("loginEmail").value = email;
         switchAuthTab("signin");
         showLogin("", data.message || "Account activated — sign in below");
       } catch (err) {
