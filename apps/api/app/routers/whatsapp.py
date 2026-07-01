@@ -1,6 +1,7 @@
 """WhatsApp Cloud API webhooks."""
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from app.routers.auth import admin_required
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.config import get_settings
 from app.services.whatsapp import whatsapp_service
@@ -38,5 +39,5 @@ async def whatsapp_webhook(request: Request) -> dict:
 
 
 @router.post("/send")
-async def send_message(to: str, text: str) -> dict:
+async def send_message(to: str, text: str, _admin: dict = Depends(admin_required())) -> dict:
     return await whatsapp_service.send_text(to, text)

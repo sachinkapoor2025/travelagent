@@ -2,13 +2,14 @@
 
 from typing import Any
 
+from app.routers.auth import admin_required
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from app.config import get_settings
 from app.services.lead_mining import lead_mining
 from app.services.worker_jobs import process_hot_leads
 
-router = APIRouter(prefix="/lead-mining", tags=["lead-mining"])
+router = APIRouter(dependencies=[admin_required()], prefix="/lead-mining", tags=["lead-mining"])
 settings = get_settings()
 
 

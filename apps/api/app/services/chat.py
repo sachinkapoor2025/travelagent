@@ -10,6 +10,13 @@ from openai import AsyncOpenAI
 from app.config import get_settings
 from app.models import Market
 from app.services.agent_router import classify_intent, specialist_prompt
+from app.services.chat_nlp import (
+    build_context_prompt,
+    has_flight_intent,
+    merge_travel_context,
+    smart_travel_reply,
+    try_flight_search,
+)
 from app.services.compliance import detect_market_from_phone
 from app.services.personalization import format_prefs_for_prompt, load_preferences
 from app.services.session import session_store
@@ -24,13 +31,13 @@ You help with flights, hotels, holiday packages, custom itineraries, visas, bagg
 airport transfers, stopovers, price alerts, referrals, and end-to-end booking.
 
 Guidelines:
-- Be warm, professional, and concise (2-4 sentences unless listing flight options).
+- Be warm, natural, and concise — sound like a real human travel agent, not a bot.
 - Support English, Arabic, Hindi, and Urdu — reply in the customer's language when possible.
-- Use tools for live prices and bookings — never invent fares or availability.
-- If origin, destination, or travel dates are missing, ask ONE clear follow-up question.
-- Default assumptions when helpful: UAE customers often fly from DXB; India from BOM/DEL.
-- Proactively suggest hotels, packages, or day plans when someone asks about a destination.
-- For general travel advice (best time to visit, visa tips, packing), answer from your knowledge."""
+- NEVER repeat the same question if the customer already gave origin, destination, or dates.
+- Use tools to search flights/hotels when you have enough details — never invent prices.
+- If details are missing, ask ONLY for what is missing (one question at a time).
+- Default: UAE customers often fly from DXB/AUH; India from DEL/BOM/BLR.
+- When listing flights, use bullet points with airline, price, and stops."""
 
 
 class ChatAgentService:
@@ -46,7 +53,7 @@ class ChatAgentService:
             self._client_key = ""
             return None
         if self._client is None or key != self._client_key:
-            self._client = AsyncOpenAI(api_key=key)
+            self._client = AsyncOpenAI(api_key=key, timeout=25.0)
             self._client_key = key
         return self._client
 
@@ -79,8 +86,10 @@ class ChatAgentService:
                 session["email"] = email
 
             session["messages"].append({"role": "user", "content": message})
+            merge_travel_context(session)
             agent_kind = classify_intent(message, session)
-            reply, tool_data = await self._generate_reply(session, session_id, agent_kind)
+
+            reply, tool_data = await self._generate_reply(session, session_id, agent_kind, message)
             session["messages"].append({"role": "assistant", "content": reply})
             if tool_data:
                 session["last_tool_data"] = tool_data
@@ -105,19 +114,45 @@ class ChatAgentService:
             logger.exception("Chat request failed for session %s", session_id)
             return {
                 "session_id": session_id,
-                "reply": "Sorry, I hit a brief glitch. Please tell me your origin, destination, and travel dates — I'll search flights for you.",
+                "reply": (
+                    "Sorry, something went wrong on my side. "
+                    "Try: \"Delhi to Dubai on 16 July\" and I'll search flights right away."
+                ),
                 "agent": "general",
                 "suggested_actions": ["Search flights", "Hotels", "Packages"],
                 "tool_data": None,
             }
 
-    async def _generate_reply(self, session: dict[str, Any], session_id: str, agent_kind: str) -> tuple[str, Any]:
-        if not self.client:
-            return self._fallback(session), None
+    async def _generate_reply(
+        self,
+        session: dict[str, Any],
+        session_id: str,
+        agent_kind: str,
+        message: str,
+    ) -> tuple[str, Any]:
+        # Reliable path: when we have full trip details, search immediately.
+        if has_flight_intent(session, message):
+            search_reply, tool_data = await try_flight_search(session, session_id)
+            if search_reply:
+                return search_reply, tool_data
 
+        if self.client:
+            openai_reply, tool_data = await self._openai_reply(session, session_id, agent_kind)
+            if openai_reply:
+                return openai_reply, tool_data
+
+        return await smart_travel_reply(session, session_id, message)
+
+    async def _openai_reply(
+        self,
+        session: dict[str, Any],
+        session_id: str,
+        agent_kind: str,
+    ) -> tuple[Optional[str], Any]:
         try:
             prefs_text = format_prefs_for_prompt(await load_preferences(session.get("phone")))
-            system = f"{CHAT_SYSTEM_PROMPT}\n{specialist_prompt(agent_kind)}\n{prefs_text}"
+            context = build_context_prompt(session)
+            system = f"{CHAT_SYSTEM_PROMPT}\n{specialist_prompt(agent_kind)}\n{context}\n{prefs_text}".strip()
             messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
             for msg in session.get("messages", [])[-16]:
                 messages.append({"role": msg["role"], "content": msg["content"]})
@@ -131,8 +166,8 @@ class ChatAgentService:
                     messages=messages,
                     tools=tools,
                     tool_choice="auto",
-                    temperature=0.6,
-                    max_tokens=500,
+                    temperature=0.5,
+                    max_tokens=600,
                 )
                 choice = response.choices[0].message
 
@@ -151,30 +186,45 @@ class ChatAgentService:
                         args = json.loads(call.function.arguments or "{}")
                         try:
                             result = await execute_tool(session_id, call.function.name, args, session)
-                        except Exception as tool_err:
+                        except Exception:
                             logger.exception("Chat tool %s failed", call.function.name)
-                            result = {"error": str(tool_err)}
+                            result = {"error": "Tool failed — please try again"}
+                        merge_travel_context(session)
                         session.update(await session_store.get(session_id) or {})
                         tool_data = result
+                        if result.get("offers"):
+                            session["last_search"] = result["offers"]
                         messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)})
                     continue
 
-                return choice.content or "How can I help with your travel plans?", tool_data
+                text = (choice.content or "").strip()
+                if text:
+                    return text, tool_data
 
-            return "I found some options for you — would you like to book or adjust your search?", tool_data
+            if tool_data and tool_data.get("offers"):
+                from app.services.chat_nlp import format_flight_offers
+
+                return format_flight_offers(session, tool_data["offers"]), tool_data
+            return None, tool_data
         except Exception:
             logger.exception("OpenAI chat generation failed")
-            return self._fallback(session), None
 
-    def _fallback(self, session: dict[str, Any]) -> str:
-        if session.get("last_search"):
-            offers = session["last_search"][:3]
-            lines = [f"• {o.get('summary', o.get('airline', 'Flight'))} — {o.get('currency')} {o.get('price')}" for o in offers]
-            return "Top flights:\n" + "\n".join(lines) + "\n\nReply with an offer to book."
-        msgs = session.get("messages", [])
-        if len(msgs) <= 1:
-            return "Hello! I'm Sarah from TravelAI. Which language do you prefer — English, Arabic, Hindi, or Urdu?"
-        return "Tell me origin, destination, and dates — I'll search live flights for you."
+        try:
+            context = build_context_prompt(session)
+            simple = await self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": f"{CHAT_SYSTEM_PROMPT}\n{context}"},
+                    *[{"role": m["role"], "content": m["content"]} for m in session.get("messages", [])[-8]],
+                ],
+                temperature=0.5,
+                max_tokens=400,
+            )
+            text = (simple.choices[0].message.content or "").strip()
+            return text or None, None
+        except Exception:
+            logger.exception("OpenAI simple chat fallback failed")
+            return None, None
 
     def _suggested_actions(self, session: dict[str, Any]) -> list[str]:
         actions = ["Search flights", "Hotels", "Packages", "Build itinerary", "Set price alert"]

@@ -160,6 +160,9 @@
       display: block;
     }
 
+    .home-only { display: none; }
+    .home-only.active { display: block; }
+
     .home-welcome h2 {
       font-size: 1.35rem;
       margin-bottom: 0.5rem;
@@ -452,7 +455,7 @@
       margin-bottom: 0.75rem;
     }
 
-    .chat-msg { margin-bottom: 0.75rem; }
+    .chat-msg { margin-bottom: 0.75rem; white-space: pre-wrap; }
     .chat-msg.user strong { color: var(--text); }
     .chat-msg.bot strong { color: var(--blue-dark); }
     .chat-msg.bot { color: var(--text-muted); }
@@ -586,9 +589,76 @@
       border-top: 1px solid var(--border);
       margin-top: 1rem;
     }
+
+    .login-overlay {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+      display: grid;
+      place-items: center;
+      z-index: 9999;
+      padding: 1rem;
+    }
+
+    .login-overlay.hidden { display: none; }
+
+    .login-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 2rem;
+      width: min(400px, 100%);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .login-card h2 { margin-bottom: 0.35rem; color: var(--blue-dark); }
+    .login-card p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem; }
+    .login-card label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.35rem; }
+    .login-card input {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 0.85rem;
+      font: inherit;
+    }
+
+    .booking-steps {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: var(--bg-soft);
+      border-radius: var(--radius-sm);
+      display: none;
+    }
+
+    .booking-steps.visible { display: block; }
+    .booking-steps .step { margin-bottom: 0.5rem; font-size: 0.9rem; }
+    .booking-steps .step.done { color: #15803d; }
+    .booking-steps a { color: var(--blue); word-break: break-all; }
   </style>
 </head>
 <body>
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-card">
+      <h2>TravelAI Admin Login</h2>
+      <p>Sign in to access leads, campaigns, and booking tools.</p>
+      <form id="loginForm">
+        <div id="cognitoFields">
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" name="email" type="email" placeholder="admin@yourcompany.com" autocomplete="username" />
+          <label for="loginPassword">Password</label>
+          <input id="loginPassword" name="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <div id="portalKeyField" style="display:none">
+          <label for="loginPortalKey">Portal Access Key</label>
+          <input id="loginPortalKey" name="portal_key" type="password" placeholder="Enter portal key" />
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:0.5rem">Sign In</button>
+        <p id="loginError" style="color:#b91c1c;font-size:0.85rem;margin-top:0.75rem;display:none"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="appShell" style="display:none">
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
@@ -717,7 +787,7 @@
           <h2>Web Chat · Sarah AI</h2>
           <span>Flights, hotels, packages</span>
         </div>
-        <div id="chatBox"><div class="chat-msg bot"><strong>Sarah:</strong> Hi! Ask me about flights, hotels, or holiday packages.</div></div>
+        <div id="chatBox"><div class="chat-msg bot"><strong>Sarah:</strong> Hi! I'm Sarah, your TravelAI consultant. Tell me where you'd like to go — e.g. "Delhi to Dubai on 16 July" — and I'll search live flights, hotels, and packages for you.</div></div>
         <form id="chatForm" class="chat-form">
           <input name="message" placeholder="Type your question..." style="flex:1" required />
           <button type="submit" class="btn btn-primary">Send</button>
@@ -783,9 +853,14 @@
         <div><label class="field-label">Email (nurture)</label><input name="email" type="email" placeholder="optional" /></div>
         <button type="submit" class="btn btn-primary" style="align-self:end">Search</button>
       </form>
-      <div id="flightResults" class="table-wrap" style="margin-top:1rem;display:none">
+        <div id="flightResults" class="table-wrap" style="margin-top:1rem;display:none">
         <table><thead><tr><th>Flight</th><th>Price</th><th>Stops</th><th>Action</th></tr></thead><tbody id="flightResultsBody"></tbody></table>
         <div id="pricePredictor" class="result-box" style="display:none;margin-top:0.75rem"></div>
+        <div id="bookingSteps" class="booking-steps">
+          <div class="step" id="stepSearch">① Search flights</div>
+          <div class="step" id="stepBook">② Hold booking &amp; generate PNR</div>
+          <div class="step" id="stepPay">③ Payment link</div>
+        </div>
       </div>
     </section>
 
@@ -928,7 +1003,7 @@
       </section>
     </div>
 
-    <section class="panel">
+    <section id="section-home-extras" class="panel panel-section home-only">
       <div class="panel-header"><h2>Channel Breakdown</h2></div>
       <div id="channelStats" class="channels"><span class="channel-pill">Loading…</span></div>
     </section>
@@ -937,6 +1012,7 @@
   </main>
 
   <footer>TravelAI Agent · Portal guide: docs/PORTAL_GUIDE.md in repo</footer>
+  </div>
 
   <script src="config.js"></script>
   <script src="airports.js"></script>
@@ -944,6 +1020,78 @@
   <script>
     const API = (window.__TRAVELAI__ && window.__TRAVELAI__.apiBase) || "/api/v1";
     let chatSessionId = null;
+    let authConfig = null;
+
+    function getAuthHeaders() {
+      const headers = {};
+      const token = sessionStorage.getItem("travelai_token");
+      const authType = sessionStorage.getItem("travelai_auth_type");
+      if (token && authType === "api_key") headers["X-Portal-Key"] = token;
+      else if (token) headers["Authorization"] = `Bearer ${token}`;
+      return headers;
+    }
+
+    function showApp() {
+      document.getElementById("loginOverlay")?.classList.add("hidden");
+      document.getElementById("appShell").style.display = "block";
+    }
+
+    function showLogin(err) {
+      document.getElementById("loginOverlay")?.classList.remove("hidden");
+      document.getElementById("appShell").style.display = "none";
+      const el = document.getElementById("loginError");
+      if (el) {
+        el.style.display = err ? "block" : "none";
+        el.textContent = err || "";
+      }
+    }
+
+    async function initAuth() {
+      try {
+        authConfig = await fetch(`${API}/auth/config`).then((r) => r.json());
+        if (!authConfig.portal_auth_enabled) {
+          showApp();
+          return;
+        }
+        if (authConfig.portal_key_auth) {
+          document.getElementById("portalKeyField").style.display = "block";
+          if (!authConfig.cognito_auth) document.getElementById("cognitoFields").style.display = "none";
+        }
+        if (sessionStorage.getItem("travelai_token")) {
+          showApp();
+          return;
+        }
+        showLogin();
+      } catch {
+        showApp();
+      }
+    }
+
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = {
+        email: fd.get("email") || undefined,
+        password: fd.get("password") || undefined,
+        portal_key: fd.get("portal_key") || undefined,
+      };
+      try {
+        const res = await fetch(`${API}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Login failed");
+        sessionStorage.setItem("travelai_token", data.id_token);
+        sessionStorage.setItem("travelai_auth_type", data.auth_type);
+        showApp();
+        loadLeads();
+        loadAnalytics();
+      } catch (err) {
+        showLogin(err.message);
+      }
+    });
 
     function showToast(message, type = "info") {
       const existing = document.querySelector(".toast");
@@ -1017,12 +1165,17 @@
     async function apiFetch(path, options = {}) {
       try {
         const res = await fetch(`${API}${path}`, {
-          headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders(), ...(options.headers || {}) },
           ...options,
         });
         let data = {};
         const text = await res.text();
         try { data = text ? JSON.parse(text) : {}; } catch { data = { detail: text || `HTTP ${res.status}` }; }
+        if (res.status === 401) {
+          sessionStorage.removeItem("travelai_token");
+          showLogin("Session expired — please sign in again");
+          throw new Error("Login required");
+        }
         if (!res.ok) {
           const msg = typeof data.detail === "string" ? data.detail
             : Array.isArray(data.detail) ? data.detail.map((d) => d.msg || d).join(", ")
@@ -1112,6 +1265,7 @@
       });
       const isHome = sectionId === "section-home";
       document.getElementById("homeStats")?.classList.toggle("active", isHome);
+      document.getElementById("section-home-extras")?.classList.toggle("active", isHome);
       document.querySelectorAll(".nav-tag").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.section === sectionId);
       });
@@ -1239,7 +1393,7 @@
       if (fd.get("email")) params.set("email", fd.get("email"));
       const res = await fetch(`${API}/flights/search?${params}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           origin: fd.get("origin"),
           destination: fd.get("destination"),
@@ -1274,20 +1428,32 @@
     async function bookFlight(index) {
       const offer = lastFlightOffers[index];
       if (!offer) return;
-      const res = await fetch(`${API}/flights/book`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offer_id: offer.offer_id, passengers: [{ type: "adult" }] }),
-      });
-      const booking = await res.json();
-      if (!res.ok) return alert(booking.detail || "Booking failed");
-      const pay = await fetch(`${API}/flights/payment-link`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ booking_id: booking.id, market: "uae" }),
-      });
-      const link = await pay.json();
-      alert(pay.ok ? `Booked! Pay here: ${link.payment_link_url}` : link.detail);
+      const steps = document.getElementById("bookingSteps");
+      const stepSearch = document.getElementById("stepSearch");
+      const stepBook = document.getElementById("stepBook");
+      const stepPay = document.getElementById("stepPay");
+      steps.classList.add("visible");
+      stepSearch.classList.add("done");
+      stepBook.textContent = "② Holding booking…";
+      try {
+        const booking = await apiFetch("/flights/book", {
+          method: "POST",
+          body: JSON.stringify({ offer_id: offer.offer_id, passengers: [{ type: "adult" }] }),
+        });
+        stepBook.classList.add("done");
+        stepBook.innerHTML = `② Booking held · PNR: <strong>${escapeHtml(booking.pnr || "pending")}</strong> · ${booking.currency} ${booking.total_amount}`;
+        stepPay.textContent = "③ Generating payment link…";
+        const link = await apiFetch("/flights/payment-link", {
+          method: "POST",
+          body: JSON.stringify({ booking_id: booking.id, market: "uae" }),
+        });
+        stepPay.classList.add("done");
+        stepPay.innerHTML = `③ Pay here: <a href="${escapeHtml(link.payment_link_url)}" target="_blank" rel="noopener">${escapeHtml(link.payment_link_url)}</a>`;
+        showToast("Booking created — share payment link with customer", "success");
+      } catch (err) {
+        stepBook.textContent = `② Booking failed: ${err.message}`;
+        showToast(err.message, "error");
+      }
     }
 
     document.getElementById("hotelSearchForm").addEventListener("submit", async (e) => {
@@ -1515,10 +1681,12 @@
 
     initAirportAutocomplete();
     initPhoneInputs();
-    loadLeads();
-    loadAnalytics();
-    setInterval(loadLeads, 15000);
-    setInterval(loadAnalytics, 30000);
+    initAuth().then(() => {
+      loadLeads();
+      loadAnalytics();
+      setInterval(loadLeads, 15000);
+      setInterval(loadAnalytics, 30000);
+    });
   </script>
 </body>
 </html>

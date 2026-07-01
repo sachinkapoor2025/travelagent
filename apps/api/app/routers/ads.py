@@ -1,12 +1,13 @@
 """Ad intelligence — fetch, analyse, generate."""
 
+from app.routers.auth import admin_required
 from fastapi import APIRouter
 
 from app.schemas import AdAnalysisRequest, AdAnalysisResponse, GeneratedAdPackage
 from app.services.ad_intelligence import ad_intelligence
 from app.storage.bookings_repo import booking_repo
 
-router = APIRouter(prefix="/ads", tags=["ads"])
+router = APIRouter(dependencies=[admin_required()], prefix="/ads", tags=["ads"])
 
 
 @router.post("/analyze", response_model=AdAnalysisResponse)

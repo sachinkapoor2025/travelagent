@@ -2,11 +2,12 @@
 
 from typing import Any
 
+from app.routers.auth import admin_required
 from fastapi import APIRouter, HTTPException
 
 from app.services.mcp_server import mcp_server
 
-router = APIRouter(prefix="/mcp", tags=["mcp"])
+router = APIRouter(dependencies=[admin_required()], prefix="/mcp", tags=["mcp"])
 
 
 @router.get("/tools")

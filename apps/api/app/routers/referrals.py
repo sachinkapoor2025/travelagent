@@ -1,11 +1,12 @@
 """Referral program endpoints."""
 
+from app.routers.auth import admin_required
 from fastapi import APIRouter, HTTPException
 
 from app.schemas import ReferralApplyRequest, ReferralRegisterRequest
 from app.services.referrals import referral_service
 
-router = APIRouter(prefix="/referrals", tags=["referrals"])
+router = APIRouter(dependencies=[admin_required()], prefix="/referrals", tags=["referrals"])
 
 
 @router.post("/register")

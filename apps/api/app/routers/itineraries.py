@@ -1,11 +1,12 @@
 """Itinerary builder endpoints."""
 
+from app.routers.auth import admin_required
 from fastapi import APIRouter, HTTPException
 
 from app.schemas import ItineraryCreate, ItineraryResponse
 from app.services.itinerary import itinerary_service
 
-router = APIRouter(prefix="/itineraries", tags=["itineraries"])
+router = APIRouter(dependencies=[admin_required()], prefix="/itineraries", tags=["itineraries"])
 
 
 @router.post("", response_model=ItineraryResponse, status_code=201)

@@ -1,11 +1,12 @@
 """Hotel and package search endpoints."""
 
+from app.routers.auth import admin_required
 from fastapi import APIRouter
 
 from app.schemas import HotelOffer, HotelSearchRequest, PackageOffer, PackageSearchRequest
 from app.services.hotels import hotel_service
 
-router = APIRouter(prefix="/hotels", tags=["hotels"])
+router = APIRouter(dependencies=[admin_required()], prefix="/hotels", tags=["hotels"])
 
 
 @router.post("/search", response_model=list[HotelOffer])

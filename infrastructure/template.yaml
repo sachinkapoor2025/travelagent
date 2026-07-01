@@ -60,6 +60,11 @@ Parameters:
     Default: ""
     NoEcho: true
     Description: SMTP password for nurture emails
+  PortalApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Shared key for admin portal login (alternative to Cognito)
 
 Globals:
   Function:
@@ -105,6 +110,7 @@ Globals:
           - !Sub https://${DomainName}
           - !Sub https://${FrontendDistribution.DomainName}
         ALLOWED_ORIGINS: !Sub https://${FrontendDistribution.DomainName},http://localhost:3000,http://localhost:8000
+        PORTAL_API_KEY: !Ref PortalApiKey
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
@@ -374,7 +380,7 @@ Resources:
       StageName: !Ref Environment
       CorsConfiguration:
         AllowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-        AllowHeaders: ["Content-Type", "Authorization", "X-Session-Id", "X-Referral-Code"]
+        AllowHeaders: ["Content-Type", "Authorization", "X-Session-Id", "X-Referral-Code", "X-Portal-Key"]
         AllowOrigins:
           - !Sub https://${FrontendDistribution.DomainName}
           - http://localhost:3000
@@ -414,6 +420,10 @@ Resources:
                 - ses:SendEmail
                 - ses:SendRawEmail
               Resource: "*"
+            - Effect: Allow
+              Action:
+                - cognito-idp:InitiateAuth
+              Resource: !GetAtt UserPool.Arn
       Events:
         ApiProxy:
           Type: HttpApi

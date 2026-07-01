@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from app.routers.auth import admin_required
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 
@@ -11,7 +12,7 @@ from app.services.booking import duffel_client
 from app.services.payments import create_payment_link
 from app.storage.bookings_repo import booking_repo
 
-router = APIRouter(prefix="/flights", tags=["flights"])
+router = APIRouter(dependencies=[admin_required()], prefix="/flights", tags=["flights"])
 
 
 @router.post("/search", response_model=FlightSearchResponse)

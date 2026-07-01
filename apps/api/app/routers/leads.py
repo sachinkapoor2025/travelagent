@@ -6,12 +6,13 @@ from fastapi import APIRouter, HTTPException
 from typing import Optional
 
 from app.models import LeadStatus
+from app.routers.auth import admin_required
 from app.schemas import LeadCreate, LeadResponse
 from app.services.compliance import detect_market_from_phone
 from app.services.voice import initiate_outbound_call
 from app.storage.leads_repo import lead_repo
 
-router = APIRouter(prefix="/leads", tags=["leads"])
+router = APIRouter(prefix="/leads", tags=["leads"], dependencies=[admin_required()])
 
 
 @router.post("", response_model=LeadResponse, status_code=201)

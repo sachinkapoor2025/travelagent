@@ -2,9 +2,10 @@
 
 from fastapi import APIRouter
 
+from app.routers.auth import admin_required
 from app.services.analytics import analytics_service
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+router = APIRouter(prefix="/analytics", tags=["analytics"], dependencies=[admin_required()])
 
 
 @router.get("/dashboard")

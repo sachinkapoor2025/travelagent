@@ -86,6 +86,7 @@ jobs:
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          PORTAL_API_KEY: ${{ secrets.PORTAL_API_KEY }}
         run: |
           cd infrastructure
           sam deploy \
@@ -109,7 +110,8 @@ jobs:
             WhatsappPhoneNumberId=${WHATSAPP_PHONE_NUMBER_ID:-} \
             TwilioAccountSid=${TWILIO_ACCOUNT_SID:-} \
             TwilioAuthToken=${TWILIO_AUTH_TOKEN:-} \
-            SmtpPassword=${SMTP_PASSWORD:-}"
+            SmtpPassword=${SMTP_PASSWORD:-} \
+            PortalApiKey=${PORTAL_API_KEY:-}"
 
       - name: Fetch CloudFormation Outputs
         id: outputs

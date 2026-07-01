@@ -1,11 +1,12 @@
 """Price alert endpoints."""
 
+from app.routers.auth import admin_required
 from fastapi import APIRouter
 
 from app.schemas import PriceAlertCreate, PriceAlertResponse
 from app.services.price_alerts import price_alert_service
 
-router = APIRouter(prefix="/price-alerts", tags=["price-alerts"])
+router = APIRouter(dependencies=[admin_required()], prefix="/price-alerts", tags=["price-alerts"])
 
 
 @router.post("", response_model=PriceAlertResponse, status_code=201)
