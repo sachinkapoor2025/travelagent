@@ -183,45 +183,6 @@ async def resend_code(payload: ResendRequest) -> dict:
     return {"message": "Confirmation code sent", "email": payload.email}
 
 
-@router.post("/activate")
-async def activate_without_code(payload: LoginRequest) -> dict:
-    """Activate account when Cognito verification email was not delivered."""
-    if not settings.user_pool_id or not settings.user_pool_client_id:
-        raise HTTPException(status_code=503, detail="Registration not configured")
-    if not payload.email or not payload.password:
-        raise HTTPException(status_code=400, detail="Email and password required")
-
-    client = _cognito_client()
-    try:
-        client.initiate_auth(
-            ClientId=settings.user_pool_client_id,
-            AuthFlow="USER_PASSWORD_AUTH",
-            AuthParameters={"USERNAME": payload.email, "PASSWORD": payload.password},
-        )
-        return {"message": "Account already active — sign in below", "email": payload.email}
-    except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "")
-        if code != "UserNotConfirmedException":
-            if code in {"NotAuthorizedException", "UserNotFoundException"}:
-                raise HTTPException(status_code=401, detail="Invalid email or password") from exc
-            raise HTTPException(status_code=503, detail="Activation unavailable") from exc
-
-    try:
-        client.admin_confirm_sign_up(UserPoolId=settings.user_pool_id, Username=payload.email)
-        client.admin_add_user_to_group(
-            UserPoolId=settings.user_pool_id,
-            Username=payload.email,
-            GroupName="admin",
-        )
-    except ClientError as exc:
-        inner = exc.response.get("Error", {}).get("Code", "")
-        if inner == "NotAuthorizedException":
-            raise HTTPException(status_code=401, detail="Invalid email or password") from exc
-        raise HTTPException(status_code=503, detail="Activation failed") from exc
-
-    return {"message": "Account activated — you can sign in now", "email": payload.email}
-
-
 @router.get("/me")
 async def me(user: dict = Depends(require_admin)) -> dict:
     return {"email": user.get("email"), "auth_type": user.get("auth")}

@@ -360,28 +360,6 @@ Resources:
             Status: Enabled
             ExpirationInDays: 90
 
-  AutoConfirmFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub travel-ai-cognito-pre-signup-${Environment}
-      Runtime: python3.12
-      Handler: index.handler
-      Timeout: 5
-      InlineCode: |
-        def handler(event, context):
-            event.setdefault("response", {})
-            event["response"]["autoConfirmUser"] = True
-            event["response"]["autoVerifyEmail"] = True
-            return event
-
-  AutoConfirmInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt AutoConfirmFunction.Arn
-      Principal: cognito-idp.amazonaws.com
-      SourceArn: !GetAtt UserPool.Arn
-
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
@@ -390,8 +368,6 @@ Resources:
       UsernameAttributes: [email]
       AdminCreateUserConfig:
         AllowAdminCreateUserOnly: false
-      LambdaConfig:
-        PreSignUp: !GetAtt AutoConfirmFunction.Arn
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -472,7 +448,6 @@ Resources:
                 - cognito-idp:ConfirmSignUp
                 - cognito-idp:ResendConfirmationCode
                 - cognito-idp:AdminAddUserToGroup
-                - cognito-idp:AdminConfirmSignUp
               Resource: !GetAtt UserPool.Arn
       Events:
         ApiProxy:
