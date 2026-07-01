@@ -2,7 +2,8 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from typing import Optional
 
 from app.models import BookingStatus, PaymentStatus
 from app.schemas import BookingCreate, BookingResponse, FlightSearchRequest, FlightSearchResponse, PaymentLinkRequest, PaymentLinkResponse
@@ -14,8 +15,13 @@ router = APIRouter(prefix="/flights", tags=["flights"])
 
 
 @router.post("/search", response_model=FlightSearchResponse)
-async def search_flights(request: FlightSearchRequest) -> FlightSearchResponse:
-    return await duffel_client.search_flights(request)
+async def search_flights(request: FlightSearchRequest, email: Optional[str] = None) -> FlightSearchResponse:
+    from app.services.email_nurture import track_abandoned_search
+
+    results = await duffel_client.search_flights(request)
+    if email:
+        track_abandoned_search(email, request.origin, request.destination, request.departure_date)
+    return results
 
 
 @router.post("/book", response_model=BookingResponse)

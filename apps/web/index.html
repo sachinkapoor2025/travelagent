@@ -4,142 +4,836 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TravelAI Agent Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
   <style>
-    :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --text: #f1f5f9; --muted: #94a3b8; }
+    :root {
+      --bg: #faf8f5;
+      --bg-soft: #f3efe8;
+      --surface: #ffffff;
+      --surface-2: #fffdf9;
+      --border: #e8e2d8;
+      --border-strong: #d4cbc0;
+      --text: #1c1917;
+      --text-muted: #78716c;
+      --gold: #b45309;
+      --gold-light: #fef3c7;
+      --gold-dark: #92400e;
+      --blue: #2563eb;
+      --blue-light: #dbeafe;
+      --blue-dark: #1d4ed8;
+      --blue-darker: #1e3a8a;
+      --rose: #be123c;
+      --rose-light: #ffe4e6;
+      --amber: #d97706;
+      --amber-light: #fef3c7;
+      --shadow: 0 1px 3px rgba(28, 25, 23, 0.06), 0 8px 24px rgba(28, 25, 23, 0.06);
+      --shadow-lg: 0 4px 6px rgba(28, 25, 23, 0.04), 0 20px 40px rgba(28, 25, 23, 0.08);
+      --radius: 14px;
+      --radius-sm: 10px;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-    header { padding: 1.5rem 2rem; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
-    header h1 { font-size: 1.25rem; }
-    header span { color: var(--muted); font-size: 0.875rem; }
-    main { padding: 2rem; max-width: 1200px; margin: 0 auto; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-    .card { background: var(--card); border-radius: 12px; padding: 1.25rem; border: 1px solid #334155; }
-    .card h3 { font-size: 0.75rem; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
-    .card .value { font-size: 2rem; font-weight: 700; color: var(--accent); }
-    section { margin-bottom: 2rem; }
-    section h2 { margin-bottom: 1rem; font-size: 1.1rem; }
-    table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
-    th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #334155; font-size: 0.875rem; }
-    th { color: var(--muted); font-weight: 500; }
-    .badge { padding: 0.2rem 0.5rem; border-radius: 999px; font-size: 0.75rem; background: #0ea5e920; color: #38bdf8; }
-    .badge.hot { background: #ef444420; color: #f87171; }
-    .badge.warm { background: #f59e0b20; color: #fbbf24; }
-    form { display: grid; gap: 0.75rem; max-width: 480px; }
-    input, select, button { padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: var(--text); }
-    button { background: var(--accent); color: #0f172a; border: none; font-weight: 600; cursor: pointer; }
-    button:hover { opacity: 0.9; }
-    .actions { display: flex; gap: 0.5rem; }
-    .actions button { padding: 0.3rem 0.6rem; font-size: 0.75rem; }
+
+    body {
+      font-family: "DM Sans", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    .topbar {
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #1d4ed8 100%);
+      color: #fff;
+      padding: 1.25rem 2rem;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .topbar-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.15);
+      display: grid;
+      place-items: center;
+      font-size: 1.25rem;
+      backdrop-filter: blur(8px);
+    }
+
+    .brand-icon span {
+      display: inline-block;
+      transform: rotate(-60deg);
+    }
+
+    .brand h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand p {
+      font-size: 0.8rem;
+      opacity: 0.85;
+      margin-top: 0.1rem;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .tag {
+      font-family: inherit;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    }
+
+    .tag:hover {
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(255, 255, 255, 0.35);
+    }
+
+    .tag:active { transform: scale(0.97); }
+
+    .tag.active {
+      background: #fff;
+      color: var(--blue-dark);
+      border-color: #fff;
+    }
+
+    .panel-section {
+      scroll-margin-top: 1rem;
+    }
+
+    .panel-section.nav-flash {
+      animation: flashHighlight 1.2s ease;
+    }
+
+    @keyframes flashHighlight {
+      0%, 100% { box-shadow: var(--shadow); }
+      30% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35), var(--shadow); }
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.75rem 1.5rem 3rem;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.35rem;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      border-radius: 4px 0 0 4px;
+    }
+
+    .stat:nth-child(1)::before { background: var(--blue); }
+    .stat:nth-child(2)::before { background: var(--rose); }
+    .stat:nth-child(3)::before { background: var(--gold); }
+    .stat:nth-child(4)::before { background: var(--amber); }
+
+    .stat-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 0.35rem;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+
+    .stat:nth-child(1) .stat-value { color: var(--blue-dark); }
+    .stat:nth-child(2) .stat-value { color: var(--rose); }
+    .stat:nth-child(3) .stat-value { color: var(--gold-dark); }
+    .stat:nth-child(4) .stat-value { color: var(--amber); }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.35rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 1.25rem;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-header h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .panel-header span {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    form { display: grid; gap: 0.65rem; }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.65rem;
+    }
+
+    @media (max-width: 560px) {
+      .form-row { grid-template-columns: 1fr; }
+    }
+
+    .form-row-4 {
+      display: grid;
+      grid-template-columns: 1.2fr 0.6fr 0.6fr 0.8fr auto;
+      gap: 0.65rem;
+      align-items: end;
+    }
+
+    @media (max-width: 768px) {
+      .form-row-4 { grid-template-columns: 1fr 1fr; }
+    }
+
+    .form-row-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr auto;
+      gap: 0.65rem;
+      align-items: end;
+    }
+
+    @media (max-width: 640px) {
+      .form-row-3 { grid-template-columns: 1fr 1fr; }
+    }
+
+    label.field-label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 0.65rem 0.85rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-strong);
+      background: var(--surface-2);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.9rem;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    input::placeholder { color: #a8a29e; }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    .checkbox-row input { width: auto; accent-color: var(--blue); }
+
+    .btn {
+      padding: 0.7rem 1.1rem;
+      border-radius: var(--radius-sm);
+      border: none;
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.15s, opacity 0.15s;
+    }
+
+    .btn:active { transform: scale(0.98); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+    }
+
+    .btn-primary:hover { box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35); }
+
+    .btn-gold {
+      background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(180, 83, 9, 0.2);
+    }
+
+    .btn-sm {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.75rem;
+      background: var(--blue-light);
+      color: var(--blue-dark);
+      border: 1px solid #bfdbfe;
+    }
+
+    .btn-sm:hover { background: #bfdbfe; }
+
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+
+    th {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      background: var(--bg-soft);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 0.8rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #fafaf9; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: var(--blue-light);
+      color: var(--blue-dark);
+    }
+
+    .badge.hot { background: var(--rose-light); color: var(--rose); }
+    .badge.warm { background: var(--amber-light); color: var(--amber); }
+
+    .empty-row td {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 2rem;
+      font-style: italic;
+    }
+
+    #chatBox {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      min-height: 160px;
+      max-height: 280px;
+      overflow-y: auto;
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .chat-msg { margin-bottom: 0.75rem; }
+    .chat-msg.user strong { color: var(--text); }
+    .chat-msg.bot strong { color: var(--blue-dark); }
+    .chat-msg.bot { color: var(--text-muted); }
+
+    .chat-form { display: flex; gap: 0.5rem; }
+
+    .channels {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .channel-pill {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 0.85rem;
+      font-size: 0.8rem;
+    }
+
+    .channel-pill strong { color: var(--blue-dark); }
+
+    pre.result-box {
+      margin-top: 0.75rem;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      font-size: 0.78rem;
+      overflow: auto;
+      color: var(--text-muted);
+      max-height: 220px;
+    }
+
+    .status-bar {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 1rem;
+    }
+
+    .status-bar.error { color: var(--rose); }
+
+    footer {
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      margin-top: 1rem;
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>✈️ TravelAI Agent Portal</h1>
-    <span>UAE + India · Voice · WhatsApp · Chat · Leads · Booking</span>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-icon"><span>✈</span></div>
+        <div>
+          <h1>TravelAI Agent Portal</h1>
+          <p>UAE & India · AI-powered travel sales</p>
+        </div>
+      </div>
+      <nav class="tags" aria-label="Portal sections">
+        <button type="button" class="tag nav-tag" data-section="section-voice">Voice</button>
+        <button type="button" class="tag nav-tag" data-section="section-whatsapp">WhatsApp</button>
+        <button type="button" class="tag nav-tag" data-section="section-chat">Chat</button>
+        <button type="button" class="tag nav-tag" data-section="section-leads">Leads</button>
+        <button type="button" class="tag nav-tag" data-section="section-flights">Flights</button>
+        <button type="button" class="tag nav-tag" data-section="section-hotels">Hotels</button>
+        <button type="button" class="tag nav-tag" data-section="section-booking">Booking</button>
+      </nav>
+    </div>
   </header>
+
   <main>
-    <div class="grid">
-      <div class="card"><h3>Total Leads</h3><div class="value" id="totalLeads">—</div></div>
-      <div class="card"><h3>Hot Leads</h3><div class="value" id="hotLeads">—</div></div>
-      <div class="card"><h3>Contact Rate</h3><div class="value" id="contactRate">—</div></div>
-      <div class="card"><h3>Chat Sessions</h3><div class="value" id="chatSessions">—</div></div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Total Leads</div>
+        <div class="stat-value" id="totalLeads">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Hot Leads</div>
+        <div class="stat-value" id="hotLeads">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Contact Rate</div>
+        <div class="stat-value" id="contactRate">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Chat Sessions (24h)</div>
+        <div class="stat-value" id="chatSessions">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Conversion Rate</div>
+        <div class="stat-value" id="conversionRate">—</div>
+      </div>
     </div>
 
-    <section>
-      <h2>Create Lead (triggers AI callback)</h2>
-      <form id="leadForm">
-        <input name="phone" placeholder="+971501234567 or +919876543210" required />
-        <input name="name" placeholder="Name" />
-        <input name="origin" placeholder="From (DXB)" />
-        <input name="destination" placeholder="To (MEL)" />
-        <input name="departure_date" type="date" />
-        <select name="market">
-          <option value="uae">UAE</option>
-          <option value="india">India</option>
-        </select>
-        <label><input type="checkbox" name="opt_in_voice" checked /> Opt-in for AI voice call</label>
-        <button type="submit">Create Lead & Call</button>
+    <div class="layout">
+      <section id="section-voice" class="panel panel-section">
+        <div class="panel-header">
+          <h2>Create Lead · Voice AI</h2>
+          <span>Triggers AI callback when opted in</span>
+        </div>
+        <form id="leadForm">
+          <div>
+            <label class="field-label">Phone</label>
+            <input name="phone" placeholder="+971501234567 or +919876543210" required />
+          </div>
+          <div class="form-row">
+            <div>
+              <label class="field-label">Name</label>
+              <input name="name" placeholder="Customer name" />
+            </div>
+            <div>
+              <label class="field-label">Market</label>
+              <select name="market">
+                <option value="uae">UAE</option>
+                <option value="india">India</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label class="field-label">From</label>
+              <input name="origin" placeholder="DXB" />
+            </div>
+            <div>
+              <label class="field-label">To</label>
+              <input name="destination" placeholder="MEL" />
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Departure</label>
+            <input name="departure_date" type="date" />
+          </div>
+          <label class="checkbox-row">
+            <input type="checkbox" name="opt_in_voice" checked />
+            Opt-in for AI voice call
+          </label>
+          <button type="submit" class="btn btn-primary">Create Lead &amp; Call</button>
+        </form>
+      </section>
+
+      <section id="section-chat" class="panel panel-section">
+        <div class="panel-header">
+          <h2>Web Chat · Sarah AI</h2>
+          <span>Flights, hotels, packages</span>
+        </div>
+        <div id="chatBox"><div class="chat-msg bot"><strong>Sarah:</strong> Hi! Ask me about flights, hotels, or holiday packages.</div></div>
+        <form id="chatForm" class="chat-form">
+          <input name="message" placeholder="Type your question..." style="flex:1" required />
+          <button type="submit" class="btn btn-primary">Send</button>
+        </form>
+      </section>
+    </div>
+
+    <section id="section-whatsapp" class="panel panel-section">
+      <div class="panel-header">
+        <h2>WhatsApp Outreach</h2>
+        <span>Send a message via WhatsApp Business API</span>
+      </div>
+      <form id="whatsappForm" class="form-row-3" style="grid-template-columns: 1fr 2fr auto;">
+        <div>
+          <label class="field-label">Phone</label>
+          <input name="phone" placeholder="+971501234567" required />
+        </div>
+        <div>
+          <label class="field-label">Message</label>
+          <input name="message" placeholder="Hi! Your travel quote is ready…" required />
+        </div>
+        <button type="submit" class="btn btn-primary" style="align-self:end">Send WhatsApp</button>
       </form>
     </section>
 
-    <section>
-      <h2>Leads Pipeline</h2>
-      <table>
-        <thead><tr><th>Phone</th><th>Route</th><th>Score</th><th>Status</th><th>Market</th><th>Actions</th></tr></thead>
-        <tbody id="leadsTable"></tbody>
-      </table>
+    <section id="section-leads" class="panel panel-section">
+      <div class="panel-header">
+        <h2>Leads Pipeline</h2>
+        <span>Auto-refreshes every 15s</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Phone</th><th>Route</th><th>Score</th><th>Status</th><th>Market</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="leadsTable">
+            <tr class="empty-row"><td colspan="6">Loading leads…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
-    <section>
-      <h2>Web Chat (Sarah AI)</h2>
-      <div id="chatBox" style="background:var(--card);border-radius:12px;padding:1rem;max-width:480px;min-height:120px;margin-bottom:0.5rem;font-size:0.875rem"></div>
-      <form id="chatForm" style="display:flex;gap:0.5rem;max-width:480px">
-        <input name="message" placeholder="Ask about flights, hotels, packages..." style="flex:1" required />
-        <button type="submit">Send</button>
+    <section id="section-flights" class="panel panel-section">
+      <div class="panel-header"><h2>Flight Search &amp; Book</h2><span>Live Duffel inventory</span></div>
+      <form id="flightSearchForm" class="form-row-4" style="grid-template-columns:repeat(5,1fr) auto">
+        <div><label class="field-label">From</label><input name="origin" value="DXB" required /></div>
+        <div><label class="field-label">To</label><input name="destination" value="BOM" required /></div>
+        <div><label class="field-label">Depart</label><input name="departure_date" type="date" required /></div>
+        <div><label class="field-label">Pax</label><input name="passengers" type="number" value="1" min="1" /></div>
+        <div><label class="field-label">Email (nurture)</label><input name="email" type="email" placeholder="optional" /></div>
+        <button type="submit" class="btn btn-primary" style="align-self:end">Search</button>
       </form>
+      <div id="flightResults" class="table-wrap" style="margin-top:1rem;display:none">
+        <table><thead><tr><th>Flight</th><th>Price</th><th>Stops</th><th>Action</th></tr></thead><tbody id="flightResultsBody"></tbody></table>
+      </div>
     </section>
 
-    <section>
-      <h2>Price Alert</h2>
-      <form id="alertForm" style="grid-template-columns:1fr 1fr 1fr 1fr auto; display:grid; max-width:100%">
-        <input name="phone" placeholder="+971501234567" required />
-        <input name="origin" placeholder="DXB" value="DXB" />
-        <input name="destination" placeholder="BOM" value="BOM" />
-        <input name="target_price" type="number" placeholder="Target price" value="1500" />
-        <button type="submit">Set Alert</button>
+    <div class="layout">
+      <section id="section-hotels" class="panel panel-section">
+        <div class="panel-header"><h2>Hotel Search</h2></div>
+        <form id="hotelSearchForm">
+          <div class="form-row">
+            <div><label class="field-label">City</label><input name="city" value="DXB" required /></div>
+            <div><label class="field-label">Check-in</label><input name="check_in" type="date" required /></div>
+          </div>
+          <div class="form-row">
+            <div><label class="field-label">Check-out</label><input name="check_out" type="date" required /></div>
+            <div><label class="field-label">Guests</label><input name="guests" type="number" value="2" min="1" /></div>
+          </div>
+          <button type="submit" class="btn btn-primary">Search Hotels</button>
+        </form>
+        <pre id="hotelResults" class="result-box" style="display:none"></pre>
+      </section>
+
+      <section id="section-itinerary" class="panel panel-section">
+        <div class="panel-header"><h2>AI Itinerary Builder</h2></div>
+        <form id="itineraryForm">
+          <div class="form-row">
+            <div><label class="field-label">Destination</label><input name="destination" value="DXB" required /></div>
+            <div><label class="field-label">Days</label><input name="days" type="number" value="5" min="1" /></div>
+          </div>
+          <div><label class="field-label">Interests</label><input name="interests" value="culture, food, shopping" /></div>
+          <button type="submit" class="btn btn-primary">Generate Itinerary</button>
+        </form>
+        <pre id="itineraryResults" class="result-box" style="display:none"></pre>
+      </section>
+    </div>
+
+    <section id="section-referrals" class="panel panel-section">
+      <div class="panel-header"><h2>Referral Program</h2></div>
+      <form id="referralForm" class="form-row-3">
+        <div><label class="field-label">Phone</label><input name="phone" placeholder="+971501234567" required /></div>
+        <div><label class="field-label">Name</label><input name="name" placeholder="Referrer name" /></div>
+        <button type="submit" class="btn btn-primary" style="align-self:end">Register Referrer</button>
       </form>
+      <pre id="referralResults" class="result-box" style="display:none"></pre>
     </section>
 
-    <section>
-      <h2>Channel Breakdown</h2>
-      <pre id="channelStats" style="background:var(--card);padding:1rem;border-radius:12px;font-size:0.8rem"></pre>
+    <div class="layout">
+      <section id="section-booking" class="panel panel-section">
+        <div class="panel-header"><h2>Price Alert · Booking</h2></div>
+        <form id="alertForm" class="form-row-4">
+          <div>
+            <label class="field-label">Phone</label>
+            <input name="phone" placeholder="+971501234567" required />
+          </div>
+          <div>
+            <label class="field-label">From</label>
+            <input name="origin" value="DXB" />
+          </div>
+          <div>
+            <label class="field-label">To</label>
+            <input name="destination" value="BOM" />
+          </div>
+          <div>
+            <label class="field-label">Target (AED/INR)</label>
+            <input name="target_price" type="number" value="1500" />
+          </div>
+          <button type="submit" class="btn btn-gold">Set Alert</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header"><h2>Ad Intelligence</h2></div>
+        <form id="adForm" class="form-row-3">
+          <div>
+            <label class="field-label">From</label>
+            <input name="origin" value="DXB" />
+          </div>
+          <div>
+            <label class="field-label">To</label>
+            <input name="destination" value="MEL" />
+          </div>
+          <div>
+            <label class="field-label">Market</label>
+            <select name="market"><option value="uae">UAE</option><option value="india">India</option></select>
+          </div>
+          <button type="submit" class="btn btn-primary">Analyze</button>
+        </form>
+        <pre id="adResults" class="result-box" style="display:none"></pre>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="panel-header"><h2>Channel Breakdown</h2></div>
+      <div id="channelStats" class="channels"><span class="channel-pill">Loading…</span></div>
     </section>
 
-    <section>
-      <h2>Ad Intelligence</h2>
-      <form id="adForm" style="grid-template-columns:1fr 1fr 1fr auto; display:grid; max-width:100%">
-        <input name="origin" placeholder="DXB" value="DXB" />
-        <input name="destination" placeholder="MEL" value="MEL" />
-        <select name="market"><option value="uae">UAE</option><option value="india">India</option></select>
-        <button type="submit">Analyze Ads</button>
-      </form>
-      <pre id="adResults" style="margin-top:1rem;background:var(--card);padding:1rem;border-radius:12px;overflow:auto;font-size:0.8rem"></pre>
-    </section>
+    <p id="apiStatus" class="status-bar"></p>
   </main>
+
+  <footer>TravelAI Agent · Portal guide: docs/PORTAL_GUIDE.md in repo</footer>
+
   <script src="config.js"></script>
   <script>
     const API = (window.__TRAVELAI__ && window.__TRAVELAI__.apiBase) || "/api/v1";
     let chatSessionId = null;
 
+    function scrollToSection(sectionId, focusSelector) {
+      const section = document.getElementById(sectionId);
+      if (!section) return;
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+      section.classList.remove("nav-flash");
+      void section.offsetWidth;
+      section.classList.add("nav-flash");
+      document.querySelectorAll(".nav-tag").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.section === sectionId);
+      });
+      if (focusSelector) {
+        setTimeout(() => {
+          const el = section.querySelector(focusSelector);
+          if (el) el.focus();
+        }, 400);
+      }
+    }
+
+    document.querySelectorAll(".nav-tag").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.section;
+        const focusMap = {
+          "section-voice": 'input[name="phone"]',
+          "section-whatsapp": 'input[name="phone"]',
+          "section-chat": 'input[name="message"]',
+          "section-leads": null,
+          "section-flights": 'input[name="origin"]',
+          "section-hotels": 'input[name="city"]',
+          "section-booking": 'input[name="phone"]',
+        };
+        scrollToSection(id, focusMap[id]);
+      });
+    });
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            document.querySelectorAll(".nav-tag").forEach((btn) => {
+              btn.classList.toggle("active", btn.dataset.section === entry.target.id);
+            });
+          }
+        });
+      },
+      { rootMargin: "-40% 0px -45% 0px", threshold: 0.1 }
+    );
+    document.querySelectorAll(".panel-section").forEach((el) => observer.observe(el));
+
+    function setApiStatus(msg, isError) {
+      const el = document.getElementById("apiStatus");
+      el.textContent = msg;
+      el.className = "status-bar" + (isError ? " error" : "");
+    }
+
     async function loadAnalytics() {
-      const res = await fetch(`${API}/analytics/dashboard`);
-      const stats = await res.json();
-      document.getElementById("contactRate").textContent = stats.contact_rate + "%";
-      document.getElementById("chatSessions").textContent = stats.chat_sessions_24h;
-      document.getElementById("channelStats").textContent = JSON.stringify(stats.channels, null, 2);
+      try {
+        const res = await fetch(`${API}/analytics/dashboard`);
+        if (!res.ok) throw new Error("API unavailable");
+        const stats = await res.json();
+        document.getElementById("contactRate").textContent =
+          stats.contact_rate != null ? stats.contact_rate + "%" : "—";
+        document.getElementById("chatSessions").textContent =
+          stats.chat_sessions_24h ?? "—";
+        document.getElementById("conversionRate").textContent =
+          stats.conversion_rate != null ? stats.conversion_rate + "%" : "—";
+        const channels = stats.channels || {};
+        const pills = Object.entries(channels).map(
+          ([k, v]) => `<span class="channel-pill"><strong>${k}:</strong> ${v}</span>`
+        );
+        document.getElementById("channelStats").innerHTML =
+          pills.length ? pills.join("") : '<span class="channel-pill">No channel data yet</span>';
+        setApiStatus("");
+      } catch {
+        document.getElementById("contactRate").textContent = "—";
+        document.getElementById("chatSessions").textContent = "—";
+        document.getElementById("channelStats").innerHTML =
+          '<span class="channel-pill">Connect API to see channel stats</span>';
+        setApiStatus("Backend API not reachable — UI loads but data actions need the API.", true);
+      }
     }
 
     async function loadLeads() {
-      const res = await fetch(`${API}/leads`);
-      const leads = await res.json();
-      document.getElementById("totalLeads").textContent = leads.length;
-      document.getElementById("hotLeads").textContent = leads.filter((l) => l.score >= 80).length;
-      const tbody = document.getElementById("leadsTable");
-      tbody.innerHTML = leads
-        .map(
-          (l) => `
-        <tr>
-          <td>${l.phone}</td>
-          <td>${l.origin || "—"} → ${l.destination || "—"}</td>
-          <td><span class="badge ${l.score >= 80 ? "hot" : l.score >= 50 ? "warm" : ""}">${l.score}</span></td>
-          <td>${l.status}</td>
-          <td>${l.market}</td>
-          <td class="actions">
-            <button onclick="callLead('${l.id}')">Call</button>
-          </td>
-        </tr>`
-        )
-        .join("");
+      try {
+        const res = await fetch(`${API}/leads`);
+        if (!res.ok) throw new Error("failed");
+        const leads = await res.json();
+        document.getElementById("totalLeads").textContent = leads.length;
+        document.getElementById("hotLeads").textContent = leads.filter((l) => l.score >= 80).length;
+        const tbody = document.getElementById("leadsTable");
+        if (!leads.length) {
+          tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No leads yet — create one above</td></tr>';
+          return;
+        }
+        tbody.innerHTML = leads
+          .map(
+            (l) => `
+          <tr>
+            <td>${l.phone}</td>
+            <td>${l.origin || "—"} → ${l.destination || "—"}</td>
+            <td><span class="badge ${l.score >= 80 ? "hot" : l.score >= 50 ? "warm" : ""}">${l.score}</span></td>
+            <td>${l.status}</td>
+            <td>${l.market}</td>
+            <td><button class="btn btn-sm" onclick="callLead('${l.id}')">Call</button> <button class="btn btn-sm" onclick="dncLead('${l.id}')">DNC</button></td>
+          </tr>`
+          )
+          .join("");
+      } catch {
+        document.getElementById("totalLeads").textContent = "—";
+        document.getElementById("hotLeads").textContent = "—";
+        document.getElementById("leadsTable").innerHTML =
+          '<tr class="empty-row"><td colspan="6">Could not load leads — check API connection</td></tr>';
+      }
     }
 
     async function callLead(id) {
@@ -147,6 +841,115 @@
       const data = await res.json();
       alert(res.ok ? `Call initiated: ${JSON.stringify(data)}` : data.detail);
     }
+
+    async function dncLead(id) {
+      if (!confirm("Add this lead to Do Not Call list?")) return;
+      const res = await fetch(`${API}/leads/${id}/dnc`, { method: "POST" });
+      const data = await res.json();
+      alert(res.ok ? "Added to DNC" : data.detail || "Failed");
+      loadLeads();
+    }
+
+    let lastFlightOffers = [];
+
+    document.getElementById("flightSearchForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const params = new URLSearchParams();
+      if (fd.get("email")) params.set("email", fd.get("email"));
+      const res = await fetch(`${API}/flights/search?${params}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          origin: fd.get("origin"),
+          destination: fd.get("destination"),
+          departure_date: fd.get("departure_date"),
+          passengers: parseInt(fd.get("passengers") || "1"),
+          market: "uae",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.detail || "Search failed");
+      lastFlightOffers = data.offers || [];
+      const tbody = document.getElementById("flightResultsBody");
+      tbody.innerHTML = lastFlightOffers.map((o, i) => `
+        <tr><td>${o.summary || o.airline}</td><td>${o.currency} ${o.price}</td><td>${o.stops}</td>
+        <td><button class="btn btn-sm" onclick="bookFlight(${i})">Book</button></td></tr>`).join("");
+      document.getElementById("flightResults").style.display = "block";
+    });
+
+    async function bookFlight(index) {
+      const offer = lastFlightOffers[index];
+      if (!offer) return;
+      const res = await fetch(`${API}/flights/book`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offer_id: offer.offer_id, passengers: [{ type: "adult" }] }),
+      });
+      const booking = await res.json();
+      if (!res.ok) return alert(booking.detail || "Booking failed");
+      const pay = await fetch(`${API}/flights/payment-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ booking_id: booking.id, market: "uae" }),
+      });
+      const link = await pay.json();
+      alert(pay.ok ? `Booked! Pay here: ${link.payment_link_url}` : link.detail);
+    }
+
+    document.getElementById("hotelSearchForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const res = await fetch(`${API}/hotels/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          city: fd.get("city"),
+          check_in: fd.get("check_in"),
+          check_out: fd.get("check_out"),
+          guests: parseInt(fd.get("guests") || "2"),
+          market: "uae",
+        }),
+      });
+      const data = await res.json();
+      const box = document.getElementById("hotelResults");
+      box.style.display = "block";
+      box.textContent = JSON.stringify(data, null, 2);
+    });
+
+    document.getElementById("itineraryForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const res = await fetch(`${API}/itineraries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          destination: fd.get("destination"),
+          days: parseInt(fd.get("days") || "5"),
+          interests: fd.get("interests"),
+          travelers: 2,
+          market: "uae",
+        }),
+      });
+      const data = await res.json();
+      const box = document.getElementById("itineraryResults");
+      box.style.display = "block";
+      box.textContent = JSON.stringify(data, null, 2);
+    });
+
+    document.getElementById("referralForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const res = await fetch(`${API}/referrals/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: fd.get("phone"), name: fd.get("name") }),
+      });
+      const data = await res.json();
+      const box = document.getElementById("referralResults");
+      box.style.display = "block";
+      box.textContent = JSON.stringify(data, null, 2);
+    });
 
     document.getElementById("leadForm").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -170,7 +973,7 @@
         loadLeads();
         e.target.reset();
         alert("Lead created — AI callback scheduled");
-      } else alert((await res.json()).detail);
+      } else alert((await res.json()).detail || "Failed to create lead");
     });
 
     document.getElementById("adForm").addEventListener("submit", async (e) => {
@@ -186,21 +989,31 @@
         }),
       });
       const data = await res.json();
-      document.getElementById("adResults").textContent = JSON.stringify(data, null, 2);
+      const box = document.getElementById("adResults");
+      box.style.display = "block";
+      box.textContent = JSON.stringify(data, null, 2);
     });
 
     document.getElementById("chatForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
+      const msg = fd.get("message");
       const res = await fetch(`${API}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: fd.get("message"), session_id: chatSessionId }),
+        body: JSON.stringify({ message: msg, session_id: chatSessionId }),
       });
+      if (!res.ok) {
+        alert("Chat unavailable — check API connection");
+        return;
+      }
       const data = await res.json();
       chatSessionId = data.session_id;
       const box = document.getElementById("chatBox");
-      box.innerHTML += `<div><strong>You:</strong> ${fd.get("message")}</div><div style="color:var(--accent)"><strong>Sarah:</strong> ${data.reply}</div><hr style="border-color:#334155;margin:0.5rem 0">`;
+      box.innerHTML += `
+        <div class="chat-msg user"><strong>You:</strong> ${msg}</div>
+        <div class="chat-msg bot"><strong>Sarah:</strong> ${data.reply}</div>`;
+      box.scrollTop = box.scrollHeight;
       e.target.reset();
     });
 
@@ -219,7 +1032,18 @@
           market: "uae",
         }),
       });
-      alert(res.ok ? "Price alert created!" : (await res.json()).detail);
+      alert(res.ok ? "Price alert created!" : (await res.json()).detail || "Failed");
+    });
+
+    document.getElementById("whatsappForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const phone = encodeURIComponent(fd.get("phone"));
+      const text = encodeURIComponent(fd.get("message"));
+      const res = await fetch(`${API}/whatsapp/send?to=${phone}&text=${text}`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      alert(res.ok ? "WhatsApp message sent!" : data.detail || "WhatsApp send failed — check API keys");
+      if (res.ok) e.target.reset();
     });
 
     loadLeads();

@@ -42,6 +42,9 @@ class BookingRepository:
     async def get(self, booking_id: str) -> Optional[dict[str, Any]]:
         return bookings_store().get(f"BOOKING#{booking_id}", "METADATA")
 
+    async def list_recent(self, limit: int = 20) -> list[dict[str, Any]]:
+        return bookings_store().query_gsi1("BOOKINGS", limit=limit)
+
     async def update_status(self, booking_id: str, status: str) -> None:
         bookings_store().update(f"BOOKING#{booking_id}", "METADATA", {"status": status, "updated_at": now_iso()})
 

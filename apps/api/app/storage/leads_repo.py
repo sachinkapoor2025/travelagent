@@ -89,6 +89,10 @@ class LeadRepository:
         item = leads_store().get(f"LEAD#{lead_id}", "METADATA")
         return _dict_to_lead(item) if item else None
 
+    async def list_by_phone(self, phone: str) -> list[dict[str, Any]]:
+        items = leads_store().query_gsi1(f"PHONE#{phone}", limit=5)
+        return [_dict_to_lead(i) for i in items]
+
     async def get_hot_leads(self, limit: int = 10) -> list[dict[str, Any]]:
         leads = await self.list_leads(limit=100)
         hot = [l for l in leads if l["score"] >= settings.lead_warm_score_threshold]

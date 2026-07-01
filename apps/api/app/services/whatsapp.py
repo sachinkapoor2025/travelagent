@@ -1,25 +1,24 @@
-"""WhatsApp Business Cloud API integration."""
+"""WhatsApp Business Cloud API — tool-calling AI assistant."""
 
+import json
 from typing import Any
 
 import httpx
 from openai import AsyncOpenAI
 
 from app.config import get_settings
-from app.models import LeadSource, Market
+from app.models import Market
+from app.services.agent_router import classify_intent, specialist_prompt
 from app.services.compliance import detect_market_from_phone
+from app.services.personalization import format_prefs_for_prompt, load_preferences
 from app.services.session import session_store
+from app.services.travel_tools import execute_tool, openai_tool_definitions
 
 settings = get_settings()
 
-WHATSAPP_SYSTEM_PROMPT = """You are Sarah, TravelAI's WhatsApp travel assistant for UAE and India customers.
-Be warm, concise, and helpful. Use the customer's preferred language.
-
-Flow: greet → ask language → collect origin, destination, dates, passengers → search flights →
-present options → answer questions → create booking → send payment link.
-
-Keep messages short (WhatsApp style). Use bullet points for flight options.
-Never invent prices — say you'll search when you have origin, destination, and dates."""
+WHATSAPP_SYSTEM_PROMPT = """You are Sarah, TravelAI's WhatsApp travel assistant for UAE and India.
+Use tools for flights, hotels, packages, bookings, and payment links. Never invent prices.
+Keep messages short (WhatsApp style). Use bullet points for options."""
 
 
 class WhatsAppService:
@@ -35,7 +34,7 @@ class WhatsAppService:
             "messaging_product": "whatsapp",
             "to": to.replace("+", ""),
             "type": "text",
-            "text": {"body": text},
+            "text": {"body": text[:4096]},
         }
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -48,10 +47,10 @@ class WhatsAppService:
 
     async def send_payment_link(self, to: str, link: str, amount: str, currency: str) -> dict[str, Any]:
         message = (
-            f"✈️ Your TravelAI booking is ready!\n\n"
+            f"Your TravelAI booking is ready!\n\n"
             f"Amount: {currency} {amount}\n"
-            f"Pay securely here: {link}\n\n"
-            f"We accept Visa, Mastercard, Amex, RuPay, UPI, and crypto cards."
+            f"Pay securely: {link}\n\n"
+            f"Visa, Mastercard, Amex, RuPay, UPI accepted."
         )
         return await self.send_text(to, message)
 
@@ -61,10 +60,12 @@ class WhatsAppService:
         market = detect_market_from_phone(from_number)
 
         if not session:
-            session = {"phone": from_number, "market": market.value, "messages": []}
-        session["messages"].append({"role": "user", "content": text})
+            prefs = await load_preferences(from_number)
+            session = {"phone": from_number, "market": market.value, "messages": [], **prefs}
 
-        reply = await self._generate_reply(session, text, market)
+        session["messages"].append({"role": "user", "content": text})
+        agent_kind = classify_intent(text, session)
+        reply = await self._generate_reply(session, session_id, agent_kind)
         session["messages"].append({"role": "assistant", "content": reply})
         await session_store.set(session_id, session)
 
@@ -73,46 +74,55 @@ class WhatsAppService:
 
         return reply
 
-    async def _generate_reply(self, session: dict[str, Any], text: str, market: Market) -> str:
+    async def _generate_reply(self, session: dict[str, Any], session_id: str, agent_kind: str) -> str:
         if not self.client:
-            return self._fallback_reply(text, session, market)
+            return await self._fallback_with_tools(session_id, session, session.get("messages", [])[-1]["content"])
 
-        messages = [{"role": "system", "content": WHATSAPP_SYSTEM_PROMPT}]
-        for msg in session.get("messages", [])[-10:]:
+        prefs_text = format_prefs_for_prompt(await load_preferences(session.get("phone")))
+        system = f"{WHATSAPP_SYSTEM_PROMPT}\n{specialist_prompt(agent_kind)}\n{prefs_text}"
+        messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+        for msg in session.get("messages", [])[-12]:
             messages.append(msg)
 
-        response = await self.client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            temperature=0.7,
-            max_tokens=500,
-        )
-        return response.choices[0].message.content or "How can I help with your travel plans today?"
+        tools = openai_tool_definitions()
+        for _ in range(4):
+            response = await self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.6,
+                max_tokens=500,
+            )
+            choice = response.choices[0].message
+            if choice.tool_calls:
+                messages.append(choice.model_dump(exclude_none=True))
+                for call in choice.tool_calls:
+                    args = json.loads(call.function.arguments or "{}")
+                    result = await execute_tool(session_id, call.function.name, args, session)
+                    session.update(await session_store.get(session_id) or {})
+                    messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)})
+                continue
+            return choice.content or "How can I help with your travel plans today?"
 
-    def _fallback_reply(self, text: str, session: dict[str, Any], market: Market) -> str:
+        return "I found options — reply BOOK to proceed or ask for more details."
+
+    async def _fallback_with_tools(self, session_id: str, session: dict[str, Any], text: str) -> str:
         lower = text.lower()
-        if "language" in lower or "english" in lower or "hindi" in lower or "arabic" in lower:
-            session["language"] = "hi" if "hindi" in lower else "ar" if "arabic" in lower else "en"
-            return "Great! Where would you like to travel from and to?"
-
-        if session.get("origin") is None and ("from" in lower or "dxb" in lower or "dubai" in lower):
-            session["origin"] = "DXB" if "dubai" in lower or "dxb" in lower else text[:3].upper()
-            return "And where would you like to go?"
-
-        if session.get("destination") is None:
-            session["destination"] = text[:3].upper() if len(text) <= 5 else text.split()[-1][:3].upper()
-            return "When would you like to depart? (e.g. 2026-08-15)"
-
-        currency = "AED" if market == Market.UAE else "INR"
-        origin = session.get("origin", "DXB")
-        dest = session.get("destination", "BOM")
-        return (
-            f"✈️ Top options {origin} → {dest}:\n"
-            f"• Direct — {currency} {'1,299' if currency == 'AED' else '45,999'}\n"
-            f"• 1-stop — {currency} {'1,065' if currency == 'AED' else '37,799'}\n"
-            f"• Budget 2-stop — {currency} {'883' if currency == 'AED' else '31,279'}\n\n"
-            f"Reply with 1, 2, or 3 to select, or ask me anything!"
-        )
+        if any(w in lower for w in ("search", "flight", "fly", "dxb", "bom")):
+            origin = session.get("origin", "DXB")
+            dest = session.get("destination", "BOM")
+            result = await execute_tool(
+                session_id,
+                "search_flights",
+                {"origin": origin, "destination": dest, "departure_date": session.get("departure_date", "2026-08-15")},
+                session,
+            )
+            offers = result.get("offers", [])[:3]
+            if offers:
+                lines = [f"• {o.get('summary', 'Flight')} — {o.get('currency')} {o.get('price')}" for o in offers]
+                return "Top flights:\n" + "\n".join(lines)
+        return "Hi! I'm Sarah from TravelAI. Tell me where you'd like to fly from and to."
 
 
 whatsapp_service = WhatsAppService()

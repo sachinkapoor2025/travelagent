@@ -158,6 +158,7 @@ class ChatMessageRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     phone: Optional[str] = None
+    email: Optional[str] = None
     referral_code: Optional[str] = None
 
 
@@ -165,6 +166,8 @@ class ChatMessageResponse(BaseModel):
     session_id: str
     reply: str
     suggested_actions: List[str] = []
+    agent: Optional[str] = None
+    tool_data: Optional[Dict[str, Any]] = None
 
 
 class HotelSearchRequest(BaseModel):

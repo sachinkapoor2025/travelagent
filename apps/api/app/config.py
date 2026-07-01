@@ -58,6 +58,10 @@ class Settings(BaseSettings):
 
     serpapi_key: str = ""
 
+    user_pool_id: str = ""
+    user_pool_client_id: str = ""
+    portal_api_key: str = ""
+
     aws_region: str = "ap-south-1"
     aws_access_key_id: str = "local"
     aws_secret_access_key: str = "local"

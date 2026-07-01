@@ -82,6 +82,7 @@ Globals:
         RECORDINGS_BUCKET: !Ref RecordingsBucket
         USER_POOL_ID: !Ref UserPool
         USER_POOL_CLIENT_ID: !Ref UserPoolClient
+        API_GATEWAY_STAGE: !Ref Environment
         OPENAI_API_KEY: !Ref OpenAiApiKey
         VAPI_API_KEY: !Ref VapiApiKey
         VAPI_ASSISTANT_ID: !Ref VapiAssistantId
@@ -103,7 +104,6 @@ Globals:
           - HasDomain
           - !Sub https://${DomainName}
           - !Sub https://${FrontendDistribution.DomainName}
-        ALLOWED_ORIGINS: !Sub https://${FrontendDistribution.DomainName},http://localhost:3000,http://localhost:8000
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]

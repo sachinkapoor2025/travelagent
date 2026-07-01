@@ -1,48 +1,24 @@
-"""Vapi voice agent orchestration and tool handlers."""
+"""Vapi voice agent — delegates tools to shared travel_tools."""
 
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
 from app.config import get_settings
-from typing import Optional
-
 from app.models import CallDirection, Language, Market
-from app.schemas import FlightSearchRequest
-from app.services.booking import duffel_client
 from app.services.compliance import can_outbound_call, detect_market_from_phone
 from app.services.session import session_store
+from app.services.travel_tools import LANGUAGE_VOICES, TRANSCRIBER_LANG, execute_tool, openai_tool_definitions
 
 settings = get_settings()
 
-VOICE_SYSTEM_PROMPT = """You are Sarah, a warm and professional travel consultant at TravelAI.
-You speak naturally like a real human — never robotic. Use short sentences, occasional filler words,
-and empathetic tone. You help customers book flights for UAE and India markets.
-
-CONVERSATION FLOW (follow in order, skip steps already completed):
-1. Greet warmly and ask preferred language: English, Arabic, Hindi, or Urdu
-2. Ask travel FROM city/airport and TO destination
-3. Ask departure date and return date (if round trip)
-4. Ask flight preference: direct, 1-stop, or multi-stop (cheapest)
-5. Ask number of passengers and cabin class (economy/business)
-6. Search flights and present top 3 options clearly with prices
-7. Answer any questions about baggage, visa, cancellation, layovers
-8. Confirm selected option and collect passenger details
-9. Create booking and send secure payment link (accepts Amex, Mastercard, RuPay, UPI, crypto cards)
-10. Confirm booking reference after payment
-
-RULES:
-- Always use the language the customer chose throughout the call
-- Never invent prices — always call search_flights tool first
-- If unsure, ask clarifying questions
-- Be concise — this is a phone call, not an essay
-- Disclose you are an AI travel assistant from TravelAI if asked
-- For Arabic: use polite formal tone. For Hindi/Hinglish: natural conversational style.
-
-Current session context is provided in each tool call."""
+VOICE_SYSTEM_PROMPT = """You are Sarah, a warm travel consultant at TravelAI for UAE and India.
+Speak naturally on phone calls. Use tools for search, booking, and payment links.
+Never invent prices. Support English, Arabic, Hindi, and Urdu."""
 
 
 def get_vapi_assistant_config(server_url: str) -> dict[str, Any]:
+    tool_defs = [t["function"] for t in openai_tool_definitions()]
     return {
         "name": "TravelAI Sarah",
         "firstMessage": (
@@ -54,17 +30,11 @@ def get_vapi_assistant_config(server_url: str) -> dict[str, Any]:
             "model": "gpt-4o",
             "temperature": 0.7,
             "systemPrompt": VOICE_SYSTEM_PROMPT,
-            "tools": [
-                {"type": "function", "function": {"name": "set_language", "description": "Store customer language preference", "parameters": {"type": "object", "properties": {"language": {"type": "string", "enum": ["en", "ar", "hi", "ur"]}}, "required": ["language"]}}},
-                {"type": "function", "function": {"name": "update_travel_details", "description": "Store travel search parameters", "parameters": {"type": "object", "properties": {"origin": {"type": "string"}, "destination": {"type": "string"}, "departure_date": {"type": "string"}, "return_date": {"type": "string"}, "passengers": {"type": "integer"}, "cabin_class": {"type": "string"}, "stop_preference": {"type": "string", "enum": ["direct", "1-stop", "multi-stop", "cheapest"]}}, "required": ["origin", "destination"]}}},
-                {"type": "function", "function": {"name": "search_flights", "description": "Search available flights", "parameters": {"type": "object", "properties": {"origin": {"type": "string"}, "destination": {"type": "string"}, "departure_date": {"type": "string"}, "return_date": {"type": "string"}, "passengers": {"type": "integer"}, "cabin_class": {"type": "string"}, "max_stops": {"type": "integer"}}, "required": ["origin", "destination", "departure_date"]}}},
-                {"type": "function", "function": {"name": "create_booking", "description": "Create flight booking for selected offer", "parameters": {"type": "object", "properties": {"offer_id": {"type": "string"}, "passengers": {"type": "array", "items": {"type": "object"}}}, "required": ["offer_id", "passengers"]}}},
-                {"type": "function", "function": {"name": "send_payment_link", "description": "Send payment link via SMS/WhatsApp", "parameters": {"type": "object", "properties": {"booking_id": {"type": "string"}, "phone": {"type": "string"}}, "required": ["booking_id", "phone"]}}},
-            ],
+            "tools": [{"type": "function", "function": fn} for fn in tool_defs],
         },
         "voice": {
             "provider": "11labs",
-            "voiceId": "21m00Tcm4TlvDq8ikWAM",
+            "voiceId": LANGUAGE_VOICES["en"],
             "model": "eleven_turbo_v2_5",
         },
         "transcriber": {"provider": "deepgram", "model": "nova-2", "language": "multi"},
@@ -76,68 +46,13 @@ def get_vapi_assistant_config(server_url: str) -> dict[str, Any]:
 
 
 async def handle_tool_call(session_id: str, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
-    session = await session_store.get(session_id)
-
-    if tool_name == "set_language":
-        lang = args.get("language", "en")
-        session = await session_store.update(session_id, {"language": lang})
-        return {"result": f"Language set to {lang}", "session": session}
-
-    if tool_name == "update_travel_details":
-        session = await session_store.update(session_id, args)
-        return {"result": "Travel details saved", "session": session}
-
-    if tool_name == "search_flights":
-        market = Market(session.get("market", "uae"))
-        max_stops = args.get("max_stops")
-        stop_pref = session.get("stop_preference") or args.get("stop_preference")
-        if stop_pref == "direct":
-            max_stops = 0
-        elif stop_pref == "1-stop":
-            max_stops = 1
-
-        search = FlightSearchRequest(
-            origin=args.get("origin", session.get("origin", "DXB")),
-            destination=args.get("destination", session.get("destination", "BOM")),
-            departure_date=args.get("departure_date", session.get("departure_date", "2026-08-01")),
-            return_date=args.get("return_date", session.get("return_date")),
-            passengers=args.get("passengers", session.get("passengers", 1)),
-            cabin_class=args.get("cabin_class", session.get("cabin_class", "economy")),
-            max_stops=max_stops,
-            market=market,
-        )
-        results = await duffel_client.search_flights(search)
-        await session_store.update(session_id, {"last_search": [o.model_dump() for o in results.offers]})
-        return {
-            "result": "Found flights",
-            "offers": [o.model_dump() for o in results.offers],
-            "instruction": "Present these options naturally to the customer. Mention airline, stops, price.",
+    result = await execute_tool(session_id, tool_name, args)
+    if tool_name == "set_language" and result.get("voice_id"):
+        result["voice_override"] = {
+            "voiceId": result["voice_id"],
+            "transcriberLanguage": result.get("transcriber_language", "multi"),
         }
-
-    if tool_name == "create_booking":
-        offer_id = args["offer_id"]
-        passengers = args.get("passengers", [])
-        order = await duffel_client.create_order(offer_id, passengers)
-        booking_data = {
-            "booking_id": order.get("id"),
-            "pnr": order.get("booking_reference"),
-            "amount": order.get("total_amount"),
-            "currency": order.get("total_currency"),
-        }
-        await session_store.update(session_id, {"booking": booking_data})
-        return {"result": "Booking created", **booking_data}
-
-    if tool_name == "send_payment_link":
-        booking_id = args.get("booking_id", session.get("booking", {}).get("booking_id"))
-        phone = args.get("phone", session.get("phone"))
-        return {
-            "result": "Payment link sent",
-            "payment_link": f"https://pay.travelai.com/{booking_id}",
-            "phone": phone,
-            "accepted_methods": "Visa, Mastercard, Amex, RuPay, UPI, Apple Pay, Google Pay, crypto cards",
-        }
-
-    return {"result": f"Unknown tool: {tool_name}"}
+    return result
 
 
 async def initiate_outbound_call(phone: str, lead_data: dict[str, Any]) -> dict[str, Any]:

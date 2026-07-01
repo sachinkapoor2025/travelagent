@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.routers import (
     ads,
     analytics,
+    auth,
     chat,
     flights,
     health,
@@ -67,6 +68,7 @@ app.include_router(itineraries.router, prefix=API_PREFIX)
 app.include_router(price_alerts.router, prefix=API_PREFIX)
 app.include_router(referrals.router, prefix=API_PREFIX)
 app.include_router(analytics.router, prefix=API_PREFIX)
+app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(webhooks.router, prefix=API_PREFIX)
 app.include_router(sms.router, prefix=API_PREFIX)
 
