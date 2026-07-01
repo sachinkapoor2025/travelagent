@@ -65,7 +65,7 @@ Globals:
   Function:
     Timeout: 29
     MemorySize: 1024
-    Architectures: [arm64]
+    Architectures: [x86_64]
     Environment:
       Variables:
         APP_ENV: !Ref Environment
