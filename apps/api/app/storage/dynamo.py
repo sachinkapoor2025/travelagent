@@ -21,15 +21,12 @@ settings = get_settings()
 @lru_cache
 def _resource():
     kwargs: dict[str, Any] = {"region_name": settings.aws_region}
+    # Only pass explicit credentials for local DynamoDB. On Lambda, AWS_* env vars
+    # include a session token; passing access key + secret without it breaks boto3.
     if settings.dynamodb_endpoint:
         kwargs["endpoint_url"] = settings.dynamodb_endpoint
-        key = settings.aws_access_key_id or "local"
-        secret = settings.aws_secret_access_key or "local"
-        kwargs["aws_access_key_id"] = key
-        kwargs["aws_secret_access_key"] = secret
-    elif settings.aws_access_key_id and settings.aws_access_key_id not in ("local", ""):
-        kwargs["aws_access_key_id"] = settings.aws_access_key_id
-        kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+        kwargs["aws_access_key_id"] = settings.local_dynamodb_access_key_id or "local"
+        kwargs["aws_secret_access_key"] = settings.local_dynamodb_secret_access_key or "local"
     return boto3.resource("dynamodb", **kwargs)
 
 
