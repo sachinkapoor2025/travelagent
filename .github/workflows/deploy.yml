@@ -87,6 +87,10 @@ jobs:
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           PORTAL_API_KEY: ${{ secrets.PORTAL_API_KEY }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
         run: |
           cd infrastructure
           sam deploy \
@@ -111,7 +115,11 @@ jobs:
             TwilioAccountSid=${TWILIO_ACCOUNT_SID:-} \
             TwilioAuthToken=${TWILIO_AUTH_TOKEN:-} \
             SmtpPassword=${SMTP_PASSWORD:-} \
-            PortalApiKey=${PORTAL_API_KEY:-}"
+            PortalApiKey=${PORTAL_API_KEY:-} \
+            RedditClientId=${REDDIT_CLIENT_ID:-} \
+            RedditClientSecret=${REDDIT_CLIENT_SECRET:-} \
+            TelegramBotToken=${TELEGRAM_BOT_TOKEN:-} \
+            SerpApiKey=${SERPAPI_KEY:-}"
 
       - name: Fetch CloudFormation Outputs
         id: outputs

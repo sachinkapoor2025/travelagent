@@ -30,6 +30,25 @@ class LoginResponse(BaseModel):
     email: Optional[str] = None
 
 
+class RegisterRequest(BaseModel):
+    email: str
+    password: str = Field(..., min_length=8)
+    name: Optional[str] = None
+
+
+class ConfirmRequest(BaseModel):
+    email: str
+    code: str = Field(..., min_length=4)
+
+
+class ResendRequest(BaseModel):
+    email: str
+
+
+def _cognito_client():
+    return boto3.client("cognito-idp", region_name=settings.aws_region)
+
+
 @router.get("/config")
 async def auth_config() -> dict:
     return {
@@ -53,7 +72,7 @@ async def login(payload: LoginRequest) -> LoginResponse:
     if not payload.email or not payload.password:
         raise HTTPException(status_code=400, detail="Email and password required")
 
-    client = boto3.client("cognito-idp", region_name=settings.aws_region)
+    client = _cognito_client()
     try:
         resp = client.initiate_auth(
             ClientId=settings.user_pool_client_id,
@@ -62,6 +81,11 @@ async def login(payload: LoginRequest) -> LoginResponse:
         )
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
+        if code == "UserNotConfirmedException":
+            raise HTTPException(
+                status_code=403,
+                detail="Email not confirmed — check your inbox or use Confirm Email",
+            ) from exc
         if code in {"NotAuthorizedException", "UserNotFoundException"}:
             raise HTTPException(status_code=401, detail="Invalid email or password") from exc
         raise HTTPException(status_code=503, detail="Login service unavailable") from exc
@@ -77,6 +101,86 @@ async def login(payload: LoginRequest) -> LoginResponse:
         auth_type="cognito",
         email=payload.email,
     )
+
+
+@router.post("/register")
+async def register(payload: RegisterRequest) -> dict:
+    if not settings.user_pool_id or not settings.user_pool_client_id:
+        raise HTTPException(status_code=503, detail="Registration not configured")
+
+    attrs = [{"Name": "email", "Value": payload.email}]
+    if payload.name:
+        attrs.append({"Name": "name", "Value": payload.name})
+
+    client = _cognito_client()
+    try:
+        client.sign_up(
+            ClientId=settings.user_pool_client_id,
+            Username=payload.email,
+            Password=payload.password,
+            UserAttributes=attrs,
+        )
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code == "UsernameExistsException":
+            raise HTTPException(status_code=409, detail="An account with this email already exists") from exc
+        if code == "InvalidPasswordException":
+            raise HTTPException(status_code=400, detail="Password must be 8+ chars with upper, lower, and number") from exc
+        raise HTTPException(status_code=503, detail="Registration unavailable") from exc
+
+    return {
+        "message": "Account created — check your email for a confirmation code",
+        "email": payload.email,
+        "next_step": "confirm",
+    }
+
+
+@router.post("/confirm")
+async def confirm(payload: ConfirmRequest) -> dict:
+    if not settings.user_pool_id or not settings.user_pool_client_id:
+        raise HTTPException(status_code=503, detail="Registration not configured")
+
+    client = _cognito_client()
+    try:
+        client.confirm_sign_up(
+            ClientId=settings.user_pool_client_id,
+            Username=payload.email,
+            ConfirmationCode=payload.code,
+        )
+        client.admin_add_user_to_group(
+            UserPoolId=settings.user_pool_id,
+            Username=payload.email,
+            GroupName="admin",
+        )
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code in {"CodeMismatchException", "ExpiredCodeException"}:
+            raise HTTPException(status_code=400, detail="Invalid or expired confirmation code") from exc
+        if code == "UserNotFoundException":
+            raise HTTPException(status_code=404, detail="No account found for this email") from exc
+        raise HTTPException(status_code=503, detail="Confirmation failed") from exc
+
+    return {"message": "Email confirmed — you can sign in now", "email": payload.email}
+
+
+@router.post("/resend-code")
+async def resend_code(payload: ResendRequest) -> dict:
+    if not settings.user_pool_client_id:
+        raise HTTPException(status_code=503, detail="Registration not configured")
+
+    client = _cognito_client()
+    try:
+        client.resend_confirmation_code(
+            ClientId=settings.user_pool_client_id,
+            Username=payload.email,
+        )
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code == "UserNotFoundException":
+            raise HTTPException(status_code=404, detail="No account found for this email") from exc
+        raise HTTPException(status_code=503, detail="Could not resend code") from exc
+
+    return {"message": "Confirmation code sent", "email": payload.email}
 
 
 @router.get("/me")

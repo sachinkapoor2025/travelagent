@@ -58,6 +58,11 @@ class Settings(BaseSettings):
 
     serpapi_key: str = ""
 
+    reddit_client_id: str = ""
+    reddit_client_secret: str = ""
+    reddit_user_agent: str = "TravelAI-LeadMiner/1.0"
+    telegram_bot_token: str = ""
+
     clay_webhook_secret: str = ""
     apollo_api_key: str = ""
     elevenlabs_api_key: str = ""

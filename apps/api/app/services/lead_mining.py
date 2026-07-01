@@ -1,8 +1,12 @@
-"""Internet lead mining — Clay/Apollo webhooks and batch import."""
+"""Internet lead mining — Clay/Apollo webhooks, automated sources, and batch import."""
 
+from __future__ import annotations
+
+from datetime import datetime, timezone
 from typing import Any
 
 from app.services.lead_enrichment import lead_enrichment
+from app.services.miners.auto_action import auto_action_lead
 from app.services.voice import initiate_outbound_call
 from app.storage.dynamo import events_store, now_iso
 from app.storage.leads_repo import lead_repo
@@ -23,24 +27,26 @@ class LeadMiningService:
     async def ingest_webhook(self, payload: dict[str, Any], source: str = "clay") -> dict[str, Any]:
         leads_raw = payload.get("leads") or payload.get("records") or [payload]
         imported = 0
-        hot_leads: list[dict[str, Any]] = []
+        actions: dict[str, int] = {}
 
         for raw in leads_raw:
             lead_data = self._normalize(raw, source)
-            if not lead_data.get("phone"):
+            if not lead_data.get("phone") and not lead_data.get("destination"):
                 continue
-            enriched = await lead_enrichment.enrich(lead_data)
-            saved = await lead_repo.create_or_update(enriched)
+            saved = await self._save_lead(await lead_enrichment.enrich(lead_data))
             imported += 1
-            if saved.get("score", 0) >= _settings().lead_hot_score_threshold:
-                hot_leads.append(saved)
+            action = await auto_action_lead(saved)
+            actions[action] = actions.get(action, 0) + 1
 
         events_store().put(
             f"MINING#{now_iso()}",
             "METADATA",
-            {"source": source, "imported": imported, "hot": len(hot_leads)},
+            {"source": source, "imported": imported, "actions": actions},
         )
-        return {"imported": imported, "hot_leads": len(hot_leads), "queued_calls": 0}
+        return {"imported": imported, "actions": actions}
+
+    async def _save_lead(self, enriched: dict[str, Any]) -> dict[str, Any]:
+        return await lead_repo.create_or_update(enriched)
 
     async def process_mined_leads(self, limit: int = 20) -> dict[str, Any]:
         leads = await lead_repo.get_hot_leads(limit=limit)
@@ -78,6 +84,54 @@ class LeadMiningService:
 
     async def import_batch(self, leads: list[dict[str, Any]], source: str = "manual") -> dict[str, Any]:
         return await self.ingest_webhook({"leads": leads}, source=source)
+
+    async def dashboard(self) -> dict[str, Any]:
+        from app.services.mining_config import get_sources
+
+        leads = await lead_repo.list_leads(limit=200)
+        today = datetime.now(timezone.utc).date().isoformat()
+        today_leads = [l for l in leads if (l.get("created_at") or "").startswith(today)]
+
+        by_source: dict[str, int] = {}
+        pipeline = []
+        for lead in sorted(leads, key=lambda x: x.get("created_at", ""), reverse=True)[:50]:
+            src = lead.get("source", "unknown")
+            by_source[src] = by_source.get(src, 0) + 1
+            pipeline.append(
+                {
+                    "id": lead.get("id"),
+                    "phone": lead.get("phone"),
+                    "name": lead.get("name"),
+                    "route": f"{lead.get('origin') or '—'} → {lead.get('destination') or '—'}",
+                    "score": lead.get("score"),
+                    "temperature": lead.get("temperature"),
+                    "language": lead.get("preferred_language"),
+                    "source": src,
+                    "status": lead.get("status"),
+                    "created_at": lead.get("created_at"),
+                }
+            )
+
+        sources = get_sources()
+        source_stats = []
+        for sid, cfg in sources.items():
+            source_stats.append(
+                {
+                    "id": sid,
+                    "label": cfg.get("label", sid),
+                    "enabled": cfg.get("enabled", False),
+                    "schedule": cfg.get("schedule", ""),
+                    "today_count": sum(1 for l in today_leads if l.get("source") == sid),
+                }
+            )
+
+        return {
+            "sources": source_stats,
+            "today_total": len(today_leads),
+            "today_by_source": {s["id"]: s["today_count"] for s in source_stats},
+            "pipeline": pipeline,
+            "total_mined": len(leads),
+        }
 
     def _normalize(self, raw: dict[str, Any], source: str) -> dict[str, Any]:
         phone = raw.get("phone") or raw.get("mobile") or raw.get("Phone")

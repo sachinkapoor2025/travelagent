@@ -1,4 +1,4 @@
-"""Scheduled Lambda worker — hot leads, price alerts, nurture emails."""
+"""Scheduled Lambda worker — hot leads, price alerts, nurture emails, lead miners."""
 
 import asyncio
 import json
@@ -10,14 +10,23 @@ logger.setLevel(logging.INFO)
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    source = event.get("source", "")
-    detail_type = event.get("detail-type", "")
-
-    if "HotLeads" in str(event.get("resources", [])) or detail_type == "Scheduled Event":
-        results = asyncio.run(_run_all_jobs())
+    job = event.get("job") or event.get("detail", {}).get("job")
+    if job in {"reddit", "telegram", "directories"}:
+        results = asyncio.run(_run_miner(job))
         return {"statusCode": 200, "body": json.dumps(results)}
 
-    return {"statusCode": 200, "body": json.dumps({"skipped": True})}
+    results = asyncio.run(_run_all_jobs())
+    return {"statusCode": 200, "body": json.dumps(results)}
+
+
+async def _run_miner(source_id: str) -> dict[str, Any]:
+    from app.services.miners.orchestrator import run_source
+
+    try:
+        return await run_source(source_id)
+    except Exception as exc:
+        logger.exception("Miner %s failed", source_id)
+        return {"source": source_id, "error": str(exc)}
 
 
 async def _run_all_jobs() -> dict[str, Any]:

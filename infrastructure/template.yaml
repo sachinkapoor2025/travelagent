@@ -65,6 +65,21 @@ Parameters:
     Default: ""
     NoEcho: true
     Description: Shared key for admin portal login (alternative to Cognito)
+  RedditClientId:
+    Type: String
+    Default: ""
+  RedditClientSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+  TelegramBotToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+  SerpApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
 
 Globals:
   Function:
@@ -111,6 +126,10 @@ Globals:
           - !Sub https://${FrontendDistribution.DomainName}
         ALLOWED_ORIGINS: !Sub https://${FrontendDistribution.DomainName},http://localhost:3000,http://localhost:8000
         PORTAL_API_KEY: !Ref PortalApiKey
+        REDDIT_CLIENT_ID: !Ref RedditClientId
+        REDDIT_CLIENT_SECRET: !Ref RedditClientSecret
+        TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
+        SERPAPI_KEY: !Ref SerpApiKey
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
@@ -347,6 +366,8 @@ Resources:
       UserPoolName: !Sub travel-ai-admin-${Environment}
       AutoVerifiedAttributes: [email]
       UsernameAttributes: [email]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -423,6 +444,10 @@ Resources:
             - Effect: Allow
               Action:
                 - cognito-idp:InitiateAuth
+                - cognito-idp:SignUp
+                - cognito-idp:ConfirmSignUp
+                - cognito-idp:ResendConfirmationCode
+                - cognito-idp:AdminAddUserToGroup
               Resource: !GetAtt UserPool.Arn
       Events:
         ApiProxy:
@@ -447,7 +472,7 @@ Resources:
     Properties:
       FunctionName: !Sub travel-ai-worker-${Environment}
       PackageType: Image
-      Timeout: 120
+      Timeout: 180
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref LeadsTable
@@ -468,6 +493,27 @@ Resources:
             Schedule: rate(2 minutes)
             Description: Hot leads, price alerts, and nurture emails
             Enabled: true
+        RedditMinerSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(2 hours)
+            Description: Reddit lead mining
+            Enabled: true
+            Input: '{"job":"reddit"}'
+        TelegramMinerSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+            Description: Telegram lead mining
+            Enabled: true
+            Input: '{"job":"telegram"}'
+        DirectoriesMinerSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 3 * * ? *)
+            Description: Google Maps and directory lead mining
+            Enabled: true
+            Input: '{"job":"directories"}'
     Metadata:
       DockerTag: travel-ai-worker
       DockerContext: ../apps/api
