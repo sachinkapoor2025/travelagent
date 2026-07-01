@@ -69,6 +69,7 @@ Globals:
     Environment:
       Variables:
         APP_ENV: !Ref Environment
+        APP_DEBUG: !If [IsProd, "false", "true"]
         STORAGE_BACKEND: dynamo
         LEADS_TABLE: !Ref LeadsTable
         BOOKINGS_TABLE: !Ref BookingsTable
@@ -105,6 +106,7 @@ Globals:
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
+  IsProd: !Equals [!Ref Environment, prod]
 
 Resources:
   LeadsTable:

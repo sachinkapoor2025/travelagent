@@ -3,6 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -91,6 +92,13 @@ class Settings(BaseSettings):
     lead_callback_delay_seconds: int = 60
     lead_hot_score_threshold: int = 80
     lead_warm_score_threshold: int = 50
+
+    @field_validator("app_env", mode="before")
+    @classmethod
+    def normalize_app_env(cls, value: str) -> str:
+        aliases = {"dev": "development", "prod": "production"}
+        normalized = aliases.get(str(value).lower(), value)
+        return normalized
 
     @property
     def cors_origins(self) -> list[str]:
