@@ -101,7 +101,7 @@ Globals:
         SITE_URL: !If
           - HasDomain
           - !Sub https://${DomainName}
-          - !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+          - ""
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
@@ -372,6 +372,9 @@ Resources:
         AllowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
         AllowHeaders: ["Content-Type", "Authorization", "X-Session-Id", "X-Referral-Code"]
         AllowOrigins: ["*"]
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 200
+        ThrottlingRateLimit: 100
 
   ApiFunction:
     Type: AWS::Serverless::Function
@@ -441,23 +444,11 @@ Resources:
                 - ses:SendRawEmail
               Resource: "*"
       Events:
-        HotLeadsSchedule:
+        WorkerSchedule:
           Type: Schedule
           Properties:
             Schedule: rate(2 minutes)
-            Description: Process hot leads and trigger AI callbacks
-            Enabled: true
-        PriceAlertsSchedule:
-          Type: Schedule
-          Properties:
-            Schedule: rate(1 hour)
-            Description: Check flight price alerts
-            Enabled: true
-        NurtureEmailSchedule:
-          Type: Schedule
-          Properties:
-            Schedule: rate(30 minutes)
-            Description: Send abandoned search nurture emails
+            Description: Hot leads, price alerts, and nurture emails
             Enabled: true
     Metadata:
       DockerTag: travel-ai-worker
