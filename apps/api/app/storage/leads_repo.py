@@ -8,13 +8,24 @@ from typing import Any, Optional
 from app.config import get_settings
 from app.models import LeadSource, LeadStatus, Market
 from app.services.leads import calculate_lead_score
+from app.services.source_labels import enrich_lead_display
 from app.storage.dynamo import leads_store, now_iso
 
 settings = get_settings()
 
+_EXTRA_FIELDS = (
+    "location",
+    "source_detail",
+    "travel_intent",
+    "enrichment",
+    "notes",
+    "temperature",
+    "preferred_language",
+)
+
 
 def _dict_to_lead(data: dict[str, Any]) -> dict[str, Any]:
-    return {
+    lead = {
         "id": data.get("id", data.get("lead_id")),
         "phone": data["phone"],
         "email": data.get("email"),
@@ -36,6 +47,35 @@ def _dict_to_lead(data: dict[str, Any]) -> dict[str, Any]:
         "opt_in_voice": data.get("opt_in_voice", False),
         "created_at": data.get("created_at", now_iso()),
     }
+    for field in _EXTRA_FIELDS:
+        if data.get(field) is not None:
+            lead[field] = data[field]
+    return enrich_lead_display(lead)
+
+
+def _matches_query(lead: dict[str, Any], q: str) -> bool:
+    needle = q.lower().strip()
+    if not needle:
+        return True
+    haystacks = [
+        lead.get("phone"),
+        lead.get("name"),
+        lead.get("email"),
+        lead.get("origin"),
+        lead.get("destination"),
+        lead.get("location"),
+        lead.get("market"),
+        lead.get("source"),
+        lead.get("source_label"),
+        lead.get("source_detail"),
+        lead.get("travel_intent"),
+        lead.get("notes"),
+        lead.get("status"),
+    ]
+    enrichment = lead.get("enrichment") or {}
+    if isinstance(enrichment, dict):
+        haystacks.extend(str(v) for v in enrichment.values() if v)
+    return any(needle in str(value).lower() for value in haystacks if value)
 
 
 class LeadRepository:
@@ -70,6 +110,9 @@ class LeadRepository:
             "opt_in_voice": data.get("opt_in_voice", False),
             "updated_at": ts,
         }
+        for field in _EXTRA_FIELDS:
+            if data.get(field) is not None:
+                record[field] = data[field]
         if not existing:
             record["created_at"] = ts
 
@@ -95,12 +138,26 @@ class LeadRepository:
         )
         return _dict_to_lead(record)
 
-    async def list_leads(self, status: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
-        items = leads_store().query_gsi1("LEADS", limit=limit)
+    async def list_leads(
+        self,
+        status: Optional[str] = None,
+        market: Optional[str] = None,
+        source: Optional[str] = None,
+        q: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        items = leads_store().query_gsi1("LEADS", limit=max(limit, 200))
         leads = [_dict_to_lead(i) for i in items]
         if status:
             leads = [l for l in leads if l["status"] == status]
-        return leads
+        if market:
+            leads = [l for l in leads if l.get("market") == market]
+        if source:
+            leads = [l for l in leads if l.get("source") == source]
+        if q:
+            leads = [l for l in leads if _matches_query(l, q)]
+        leads.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return leads[:limit]
 
     async def get_by_id(self, lead_id: str) -> Optional[dict[str, Any]]:
         item = leads_store().get(f"LEAD#{lead_id}", "METADATA")
@@ -145,8 +202,14 @@ def _score_from_dict(data: dict[str, Any]) -> int:
     lead = FakeLead()
     for k, v in data.items():
         setattr(lead, k, v)
-    lead.market = Market(data.get("market", "uae"))
-    lead.source = LeadSource(data.get("source", "website"))
+    try:
+        lead.market = Market(data.get("market", "uae"))
+    except ValueError:
+        lead.market = Market.UAE
+    try:
+        lead.source = LeadSource(data.get("source", "website"))
+    except ValueError:
+        lead.source = LeadSource.WEBSITE
     lead.opt_in_voice = data.get("opt_in_voice", False)
     lead.passengers = int(data.get("passengers", 1))
     return calculate_lead_score(lead)  # type: ignore[arg-type]

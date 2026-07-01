@@ -23,7 +23,7 @@ MINERS = {
 MAX_IMPORT_PER_RUN = 30
 
 
-async def run_source(source_id: str, force: bool = False, fast: bool = True) -> dict[str, Any]:
+async def run_source(source_id: str, force: bool = False, fast: bool = False) -> dict[str, Any]:
     sources = get_sources()
     if source_id in {"clay", "apollo"}:
         return {

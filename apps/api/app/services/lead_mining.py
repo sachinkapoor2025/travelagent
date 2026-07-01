@@ -87,6 +87,7 @@ class LeadMiningService:
 
     async def dashboard(self) -> dict[str, Any]:
         from app.services.mining_config import get_sources
+        from app.services.source_labels import enrich_lead_display, source_display_label
 
         leads = await lead_repo.list_leads(limit=200)
         today = datetime.now(timezone.utc).date().isoformat()
@@ -95,20 +96,29 @@ class LeadMiningService:
         by_source: dict[str, int] = {}
         pipeline = []
         for lead in sorted(leads, key=lambda x: x.get("created_at", ""), reverse=True)[:50]:
+            display = enrich_lead_display(lead)
             src = lead.get("source", "unknown")
             by_source[src] = by_source.get(src, 0) + 1
             pipeline.append(
                 {
-                    "id": lead.get("id"),
-                    "phone": lead.get("phone"),
-                    "name": lead.get("name"),
-                    "route": f"{lead.get('origin') or '—'} → {lead.get('destination') or '—'}",
-                    "score": lead.get("score"),
-                    "temperature": lead.get("temperature"),
-                    "language": lead.get("preferred_language"),
+                    "id": display.get("id"),
+                    "phone": display.get("phone"),
+                    "name": display.get("name"),
+                    "location": display.get("location"),
+                    "route": f"{display.get('origin') or '—'} → {display.get('destination') or '—'}",
+                    "departure_date": display.get("departure_date"),
+                    "return_date": display.get("return_date"),
+                    "score": display.get("score"),
+                    "temperature": display.get("temperature"),
+                    "language": display.get("preferred_language"),
                     "source": src,
-                    "status": lead.get("status"),
-                    "created_at": lead.get("created_at"),
+                    "source_label": display.get("source_label") or source_display_label(src, display.get("source_detail")),
+                    "source_detail": display.get("source_detail"),
+                    "travel_intent": display.get("travel_intent"),
+                    "market": display.get("market"),
+                    "status": display.get("status"),
+                    "notes": display.get("notes"),
+                    "created_at": display.get("created_at"),
                 }
             )
 
@@ -149,6 +159,8 @@ class LeadMiningService:
             "opt_in_voice": raw.get("opt_in_voice", False),
             "opt_in_marketing": raw.get("opt_in_marketing", True),
             "source_detail": raw.get("source_detail") or source,
+            "travel_intent": raw.get("travel_intent"),
+            "notes": raw.get("notes") or raw.get("context") or raw.get("snippet"),
         }
 
 

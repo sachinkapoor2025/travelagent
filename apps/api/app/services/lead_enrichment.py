@@ -48,6 +48,8 @@ class LeadEnrichmentService:
             "employer": lead.get("employer") or lead.get("company"),
             "location": lead.get("location") or lead.get("city"),
             "source_detail": lead.get("source_detail") or lead.get("source"),
+            "travel_intent": lead.get("travel_intent"),
+            "notes": lead.get("notes"),
         }
         enriched["score"] = self._rule_score(enriched)
         enriched["temperature"] = temperature_from_score(enriched["score"])

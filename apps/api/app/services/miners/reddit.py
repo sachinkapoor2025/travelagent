@@ -73,10 +73,12 @@ async def mine_reddit(limit_per_sub: int = 15) -> list[dict[str, Any]]:
                             "phone": phone_match.group(1) if phone_match else "",
                             "origin": _guess_route(text)[0],
                             "destination": _guess_route(text)[1],
+                            "departure_date": _extract_date(text),
                             "market": _market_for_sub(sub),
                             "source": "reddit",
                             "source_detail": f"r/{sub} · {post.get('permalink', '')}",
                             "travel_intent": "researching",
+                            "notes": text[:400].strip(),
                             "opt_in_marketing": True,
                         }
                     )
@@ -104,4 +106,15 @@ def _market_for_sub(sub: str) -> str:
         return "india"
     if sub.lower() in {"dubai", "uae", "abudhabi"}:
         return "uae"
+    if sub.lower() in {"askuk", "expats"}:
+        return "uk"
+    if sub.lower() in {"ausfinance"}:
+        return "au"
+    if sub.lower() in {"flights", "solotravel", "travel"}:
+        return "us"
     return "uae"
+
+
+def _extract_date(text: str) -> str | None:
+    match = re.search(r"\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{2}-\d{2}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{1,2})\b", text, re.I)
+    return match.group(1) if match else None

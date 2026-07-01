@@ -32,21 +32,28 @@ class LeadCreate(BaseModel):
 class LeadResponse(BaseModel):
     id: UUID
     phone: str
-    email: Optional[str]
-    name: Optional[str]
+    email: Optional[str] = None
+    name: Optional[str] = None
     market: Market
     source: LeadSource
     status: LeadStatus
     score: int
-    preferred_language: Optional[Language]
-    origin: Optional[str]
-    destination: Optional[str]
-    departure_date: Optional[str]
-    return_date: Optional[str]
-    passengers: int
-    cabin_class: Optional[str]
-    budget_max: Optional[float]
-    stop_preference: Optional[str]
+    temperature: Optional[str] = None
+    preferred_language: Optional[Language] = None
+    origin: Optional[str] = None
+    destination: Optional[str] = None
+    departure_date: Optional[str] = None
+    return_date: Optional[str] = None
+    passengers: int = 1
+    cabin_class: Optional[str] = None
+    budget_max: Optional[float] = None
+    stop_preference: Optional[str] = None
+    location: Optional[str] = None
+    source_detail: Optional[str] = None
+    source_label: Optional[str] = None
+    travel_intent: Optional[str] = None
+    notes: Optional[str] = None
+    enrichment: Optional[Dict[str, Any]] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

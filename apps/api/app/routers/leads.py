@@ -28,8 +28,20 @@ async def create_lead(payload: LeadCreate) -> LeadResponse:
 
 
 @router.get("", response_model=list[LeadResponse])
-async def list_leads(status: Optional[LeadStatus] = None, limit: int = 50) -> list[LeadResponse]:
-    leads = await lead_repo.list_leads(status=status.value if status else None, limit=limit)
+async def list_leads(
+    status: Optional[LeadStatus] = None,
+    market: Optional[str] = None,
+    source: Optional[str] = None,
+    q: Optional[str] = None,
+    limit: int = 200,
+) -> list[LeadResponse]:
+    leads = await lead_repo.list_leads(
+        status=status.value if status else None,
+        market=market,
+        source=source,
+        q=q,
+        limit=limit,
+    )
     return [LeadResponse(**l) for l in leads]
 
 

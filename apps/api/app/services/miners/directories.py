@@ -74,7 +74,7 @@ async def _mine_serpapi() -> list[dict[str, Any]]:
                             "location": place.get("address"),
                             "market": market,
                             "source": "directories",
-                            "source_detail": f"serpapi:{query}",
+                            "source_detail": f"google_maps:{query}",
                             "travel_intent": "exploring",
                             "opt_in_marketing": True,
                         }

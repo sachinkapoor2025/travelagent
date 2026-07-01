@@ -130,6 +130,7 @@ Globals:
         REDDIT_CLIENT_SECRET: !Ref RedditClientSecret
         TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
         SERPAPI_KEY: !Ref SerpApiKey
+        WORKER_FUNCTION_NAME: !Sub travel-ai-worker-${Environment}
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
@@ -449,6 +450,10 @@ Resources:
                 - cognito-idp:ResendConfirmationCode
                 - cognito-idp:AdminAddUserToGroup
               Resource: !GetAtt UserPool.Arn
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:travel-ai-worker-${Environment}
       Events:
         ApiProxy:
           Type: HttpApi

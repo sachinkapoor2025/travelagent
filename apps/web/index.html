@@ -713,6 +713,111 @@
       text-transform: uppercase;
     }
 
+    .lead-filters {
+      display: grid;
+      grid-template-columns: 2fr repeat(3, minmax(120px, 1fr)) auto;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      align-items: end;
+    }
+
+    @media (max-width: 900px) {
+      .lead-filters { grid-template-columns: 1fr 1fr; }
+    }
+
+    .lead-filters input,
+    .lead-filters select {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font: inherit;
+      background: var(--surface);
+    }
+
+    .lead-row-clickable { cursor: pointer; transition: background 0.15s; }
+    .lead-row-clickable:hover { background: var(--bg-soft); }
+
+    .source-pill {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: var(--blue-light);
+      color: var(--blue-dark);
+      white-space: nowrap;
+    }
+
+    .source-pill.reddit { background: #ffedd5; color: #c2410c; }
+    .source-pill.telegram { background: #dbeafe; color: #1d4ed8; }
+    .source-pill.directories { background: #dcfce7; color: #15803d; }
+
+    .lead-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(28, 25, 23, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 1rem;
+    }
+
+    .lead-modal-backdrop.open { display: flex; }
+
+    .lead-modal {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      max-width: 640px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: auto;
+    }
+
+    .lead-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 1rem;
+      padding: 1.25rem 1.25rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .lead-modal-header h3 { font-size: 1.1rem; }
+
+    .lead-modal-body {
+      padding: 1rem 1.25rem 1.25rem;
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .lead-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.65rem 1rem;
+    }
+
+    .lead-detail-item label {
+      display: block;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 0.15rem;
+    }
+
+    .lead-detail-item span { font-size: 0.92rem; word-break: break-word; }
+
+    .lead-notes {
+      padding: 0.75rem;
+      background: var(--bg-soft);
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      white-space: pre-wrap;
+    }
+
     .booking-steps {
       margin-top: 1rem;
       padding: 1rem;
@@ -955,19 +1060,83 @@
     <section id="section-leads" class="panel panel-section">
       <div class="panel-header">
         <h2>Leads Pipeline</h2>
-        <span>Auto-refreshes every 15s</span>
+        <span>Click a row for full details · auto-refreshes every 15s</span>
+      </div>
+      <div class="lead-filters">
+        <div>
+          <label class="field-label">Search</label>
+          <input id="leadSearchInput" type="search" placeholder="Phone, name, route, location, source…" />
+        </div>
+        <div>
+          <label class="field-label">Country / Market</label>
+          <select id="leadMarketFilter">
+            <option value="">All markets</option>
+            <option value="uae">🇦🇪 UAE</option>
+            <option value="india">🇮🇳 India</option>
+            <option value="uk">🇬🇧 UK</option>
+            <option value="us">🇺🇸 US</option>
+            <option value="au">🇦🇺 Australia</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Source</label>
+          <select id="leadSourceFilter">
+            <option value="">All sources</option>
+            <option value="directories">Google Maps / Directories</option>
+            <option value="reddit">Reddit</option>
+            <option value="telegram">Telegram</option>
+            <option value="manual">Manual</option>
+            <option value="website">Website</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Status</label>
+          <select id="leadStatusFilter">
+            <option value="">All statuses</option>
+            <option value="new">New</option>
+            <option value="contacted">Contacted</option>
+            <option value="qualified">Qualified</option>
+            <option value="quoted">Quoted</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-sm" id="leadFilterBtn">Apply</button>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Phone</th><th>Route</th><th>Score</th><th>Status</th><th>Market</th><th>Actions</th></tr>
+            <tr>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Route</th>
+              <th>Dates</th>
+              <th>Source</th>
+              <th>Market</th>
+              <th>Score</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
           </thead>
           <tbody id="leadsTable">
-            <tr class="empty-row"><td colspan="6">Loading leads…</td></tr>
+            <tr class="empty-row"><td colspan="9">Loading leads…</td></tr>
           </tbody>
         </table>
       </div>
     </section>
+
+    <div id="leadDetailModal" class="lead-modal-backdrop" aria-hidden="true">
+      <div class="lead-modal" role="dialog" aria-labelledby="leadDetailTitle">
+        <div class="lead-modal-header">
+          <div>
+            <h3 id="leadDetailTitle">Lead details</h3>
+            <div id="leadDetailSubtitle" class="meta" style="margin-top:0.25rem;color:var(--text-muted);font-size:0.85rem"></div>
+          </div>
+          <button type="button" class="btn btn-sm" id="leadDetailClose">Close</button>
+        </div>
+        <div class="lead-modal-body" id="leadDetailBody"></div>
+      </div>
+    </div>
 
     <section id="section-flights" class="panel panel-section">
       <div class="panel-header"><h2>Flight Search &amp; Book</h2><span>Live Duffel inventory</span></div>
@@ -1057,20 +1226,49 @@
         <button type="button" class="btn btn-sm" id="runOutboundBtn">Run Outbound Campaign</button>
       </div>
       <h3 style="font-size:0.95rem;margin-bottom:0.5rem">Live Pipeline</h3>
+      <div class="lead-filters" style="grid-template-columns:2fr repeat(2,minmax(120px,1fr)) auto;margin-bottom:0.75rem">
+        <div>
+          <label class="field-label">Search pipeline</label>
+          <input id="miningSearchInput" type="search" placeholder="Phone, name, location, source…" />
+        </div>
+        <div>
+          <label class="field-label">Market</label>
+          <select id="miningMarketFilter">
+            <option value="">All</option>
+            <option value="uae">UAE</option>
+            <option value="india">India</option>
+            <option value="uk">UK</option>
+            <option value="us">US</option>
+            <option value="au">AU</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Source</label>
+          <select id="miningSourceFilter">
+            <option value="">All</option>
+            <option value="directories">Google Maps</option>
+            <option value="reddit">Reddit</option>
+            <option value="telegram">Telegram</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-sm" id="miningFilterBtn">Filter</button>
+      </div>
       <div style="overflow-x:auto">
         <table class="mining-pipeline">
           <thead>
             <tr>
+              <th>Name</th>
               <th>Phone</th>
               <th>Route</th>
-              <th>Score</th>
+              <th>Location</th>
               <th>Source</th>
+              <th>Market</th>
+              <th>Score</th>
               <th>Status</th>
-              <th>Language</th>
             </tr>
           </thead>
           <tbody id="miningPipelineBody">
-            <tr><td colspan="6">Loading pipeline…</td></tr>
+            <tr><td colspan="8">Loading pipeline…</td></tr>
           </tbody>
         </table>
       </div>
@@ -1575,28 +1773,173 @@
       }
     }
 
+    let leadsCache = [];
+    let miningPipelineCache = [];
+
+    function sourcePillHtml(source, label) {
+      const text = label || source || "Unknown";
+      const cls = ["directories", "reddit", "telegram"].includes(source) ? source : "";
+      return `<span class="source-pill ${cls}">${escapeHtml(text)}</span>`;
+    }
+
+    function formatLeadDates(lead) {
+      const dep = lead.departure_date || "—";
+      const ret = lead.return_date ? ` → ${lead.return_date}` : "";
+      return `${dep}${ret}`;
+    }
+
+    function buildLeadQuery() {
+      const params = new URLSearchParams();
+      params.set("limit", "200");
+      const q = document.getElementById("leadSearchInput")?.value?.trim();
+      const market = document.getElementById("leadMarketFilter")?.value;
+      const source = document.getElementById("leadSourceFilter")?.value;
+      const status = document.getElementById("leadStatusFilter")?.value;
+      if (q) params.set("q", q);
+      if (market) params.set("market", market);
+      if (source) params.set("source", source);
+      if (status) params.set("status", status);
+      return params.toString();
+    }
+
+    function filterMiningPipeline(rows) {
+      const q = (document.getElementById("miningSearchInput")?.value || "").trim().toLowerCase();
+      const market = document.getElementById("miningMarketFilter")?.value || "";
+      const source = document.getElementById("miningSourceFilter")?.value || "";
+      return rows.filter((row) => {
+        if (market && row.market !== market) return false;
+        if (source && row.source !== source) return false;
+        if (!q) return true;
+        const blob = [
+          row.phone, row.name, row.route, row.location, row.source_label,
+          row.source, row.market, row.status, row.notes, row.travel_intent,
+        ].filter(Boolean).join(" ").toLowerCase();
+        return blob.includes(q);
+      });
+    }
+
+    function renderMiningPipeline(rows) {
+      const tbody = document.getElementById("miningPipelineBody");
+      const filtered = filterMiningPipeline(rows);
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="8">No leads match your filters</td></tr>';
+        return;
+      }
+      tbody.innerHTML = filtered.map((row) => `
+        <tr class="lead-row-clickable" data-lead-id="${escapeHtml(row.id || "")}">
+          <td>${escapeHtml(row.name || "—")}</td>
+          <td>${escapeHtml(row.phone || "—")}</td>
+          <td>${escapeHtml(row.route || "—")}</td>
+          <td>${escapeHtml(row.location || "—")}</td>
+          <td>${sourcePillHtml(row.source, row.source_label)}</td>
+          <td>${escapeHtml((row.market || "—").toUpperCase())}</td>
+          <td><span class="badge ${(row.score || 0) >= 80 ? "hot" : (row.score || 0) >= 50 ? "warm" : ""}">${row.score ?? "—"}</span></td>
+          <td>${escapeHtml(row.status || "—")}</td>
+        </tr>
+      `).join("");
+      tbody.querySelectorAll("[data-lead-id]").forEach((tr) => {
+        tr.addEventListener("click", () => {
+          const lead = leadsCache.find((l) => l.id === tr.dataset.leadId);
+          const row = filtered.find((item) => item.id === tr.dataset.leadId);
+          if (lead) openLeadDetail(lead);
+          else if (row) openLeadDetail(row);
+        });
+      });
+    }
+
+    function openLeadDetail(lead) {
+      const modal = document.getElementById("leadDetailModal");
+      const title = document.getElementById("leadDetailTitle");
+      const subtitle = document.getElementById("leadDetailSubtitle");
+      const body = document.getElementById("leadDetailBody");
+      const label = lead.source_label || lead.source || "Lead";
+      title.textContent = lead.name || lead.phone || "Lead details";
+      subtitle.textContent = `${label} · ${(lead.market || "").toUpperCase()} · Score ${lead.score ?? "—"}`;
+      const items = [
+        ["Phone", lead.phone],
+        ["Email", lead.email],
+        ["Location", lead.location || lead.enrichment?.location],
+        ["Route", `${lead.origin || "—"} → ${lead.destination || "—"}`],
+        ["Departure", lead.departure_date],
+        ["Return", lead.return_date],
+        ["Passengers", lead.passengers],
+        ["Travel intent", lead.travel_intent || lead.enrichment?.travel_intent],
+        ["Source", lead.source_label || lead.source],
+        ["Source detail", lead.source_detail || lead.enrichment?.source_detail],
+        ["Status", lead.status],
+        ["Temperature", lead.temperature],
+        ["Language", lead.preferred_language],
+        ["Created", lead.created_at],
+      ];
+      body.innerHTML = `
+        <div class="lead-detail-grid">
+          ${items.map(([k, v]) => `
+            <div class="lead-detail-item">
+              <label>${escapeHtml(k)}</label>
+              <span>${escapeHtml(v || "—")}</span>
+            </div>
+          `).join("")}
+        </div>
+        ${lead.notes || lead.enrichment?.notes ? `
+          <div>
+            <label class="field-label">Notes / context</label>
+            <div class="lead-notes">${escapeHtml(lead.notes || lead.enrichment?.notes)}</div>
+          </div>
+        ` : ""}
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.25rem">
+          <button type="button" class="btn btn-sm btn-primary" onclick="callLead('${lead.id}')">Call lead</button>
+          <button type="button" class="btn btn-sm" onclick="dncLead('${lead.id}')">Add to DNC</button>
+        </div>
+      `;
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeLeadDetail() {
+      const modal = document.getElementById("leadDetailModal");
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
     async function fetchSourceLeads(sourceId, btn) {
       const statusEl = document.getElementById(`miningStatus-${sourceId}`);
       setButtonLoading(btn, true);
-      if (statusEl) statusEl.textContent = "Fetching…";
+      if (statusEl) statusEl.textContent = "Queuing fetch (all markets)…";
       try {
         const data = await apiFetch(`/lead-mining/run/${sourceId}?force=true`, { method: "POST" });
-        const imported = data.imported ?? 0;
-        const raw = data.raw_found ?? 0;
-        const msg = data.skipped
-          ? (data.reason || "Skipped")
-          : data.error
-            ? data.error
-            : `Imported ${imported} lead(s) from ${raw} found`;
-        if (statusEl) statusEl.textContent = msg;
-        showToast(msg, data.error ? "error" : "success");
+        let msg;
+        if (data.queued) {
+          msg = data.message || "Fetching leads in background across all markets…";
+          if (statusEl) statusEl.textContent = msg;
+          showToast(msg, "success");
+          let polls = 0;
+          const poll = setInterval(async () => {
+            polls += 1;
+            await loadMiningDashboard();
+            await loadLeads();
+            if (polls >= 6) {
+              clearInterval(poll);
+              if (statusEl) statusEl.textContent = "Background fetch complete — refresh if needed";
+            }
+          }, 15000);
+        } else {
+          const imported = data.imported ?? 0;
+          const raw = data.raw_found ?? 0;
+          msg = data.skipped
+            ? (data.reason || "Skipped")
+            : data.error
+              ? data.error
+              : `Imported ${imported} lead(s) from ${raw} found`;
+          if (statusEl) statusEl.textContent = msg;
+          showToast(msg, data.error ? "error" : "success");
+          await loadMiningDashboard();
+          await loadLeads();
+        }
         const box = document.getElementById("miningResults");
         if (box) {
           box.style.display = "block";
           box.textContent = JSON.stringify(data, null, 2);
         }
-        await loadMiningDashboard();
-        await loadLeads();
       } catch (err) {
         if (statusEl) statusEl.textContent = err.message;
         showToast(err.message, "error");
@@ -1649,22 +1992,8 @@
             btn.addEventListener("click", () => fetchSourceLeads(btn.dataset.source, btn));
           });
         }
-        const tbody = document.getElementById("miningPipelineBody");
-        const pipeline = data.pipeline || [];
-        if (!pipeline.length) {
-          tbody.innerHTML = '<tr><td colspan="6">No mined leads yet — enable sources or run miners</td></tr>';
-        } else {
-          tbody.innerHTML = pipeline.map((row) => `
-            <tr>
-              <td>${escapeHtml(row.phone || "—")}</td>
-              <td>${escapeHtml(row.route || "—")}</td>
-              <td><span class="badge ${(row.score || 0) >= 80 ? "hot" : (row.score || 0) >= 50 ? "warm" : ""}">${row.score ?? "—"}</span></td>
-              <td>${escapeHtml(row.source || "—")}</td>
-              <td>${escapeHtml(row.status || "—")}</td>
-              <td>${escapeHtml(row.language || "—")}</td>
-            </tr>
-          `).join("");
-        }
+        miningPipelineCache = data.pipeline || [];
+        renderMiningPipeline(miningPipelineCache);
       } catch (err) {
         showToast(err.message, "error");
       }
@@ -1672,32 +2001,46 @@
 
     async function loadLeads() {
       try {
-        const leads = await apiFetch("/leads");
+        const query = buildLeadQuery();
+        const leads = await apiFetch(`/leads?${query}`);
+        leadsCache = leads;
         document.getElementById("totalLeads").textContent = leads.length;
         document.getElementById("hotLeads").textContent = leads.filter((l) => l.score >= 80).length;
         const tbody = document.getElementById("leadsTable");
         if (!leads.length) {
-          tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No leads yet — create one above</td></tr>';
+          tbody.innerHTML = '<tr class="empty-row"><td colspan="9">No leads match your filters</td></tr>';
           return;
         }
         tbody.innerHTML = leads
           .map(
             (l) => `
-          <tr>
+          <tr class="lead-row-clickable" data-lead-id="${escapeHtml(l.id)}">
+            <td>${escapeHtml(l.name || "—")}</td>
             <td>${escapeHtml(l.phone)}</td>
             <td>${escapeHtml(l.origin || "—")} → ${escapeHtml(l.destination || "—")}</td>
-            <td><span class="badge ${l.score >= 80 ? "hot" : l.score >= 50 ? "warm" : ""}">${l.score}</span> ${l.temperature || ""}</td>
+            <td>${escapeHtml(formatLeadDates(l))}</td>
+            <td>${sourcePillHtml(l.source, l.source_label)}</td>
+            <td>${escapeHtml((l.market || "—").toUpperCase())}</td>
+            <td><span class="badge ${l.score >= 80 ? "hot" : l.score >= 50 ? "warm" : ""}">${l.score}</span></td>
             <td>${escapeHtml(l.status)}</td>
-            <td>${escapeHtml(l.market)}</td>
-            <td><button class="btn btn-sm" onclick="callLead('${l.id}')">Call</button> <button class="btn btn-sm" onclick="dncLead('${l.id}')">DNC</button></td>
+            <td>
+              <button class="btn btn-sm" onclick="event.stopPropagation(); callLead('${l.id}')">Call</button>
+              <button class="btn btn-sm" onclick="event.stopPropagation(); dncLead('${l.id}')">DNC</button>
+            </td>
           </tr>`
           )
           .join("");
+        tbody.querySelectorAll("[data-lead-id]").forEach((tr) => {
+          tr.addEventListener("click", () => {
+            const lead = leadsCache.find((item) => item.id === tr.dataset.leadId);
+            if (lead) openLeadDetail(lead);
+          });
+        });
       } catch (err) {
         document.getElementById("totalLeads").textContent = "—";
         document.getElementById("hotLeads").textContent = "—";
         document.getElementById("leadsTable").innerHTML =
-          `<tr class="empty-row"><td colspan="6">${escapeHtml(err.message)}</td></tr>`;
+          `<tr class="empty-row"><td colspan="9">${escapeHtml(err.message)}</td></tr>`;
       }
     }
 
@@ -2052,6 +2395,18 @@
 
     initAirportAutocomplete();
     initPhoneInputs();
+    document.getElementById("leadFilterBtn")?.addEventListener("click", () => loadLeads());
+    document.getElementById("leadSearchInput")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") loadLeads();
+    });
+    document.getElementById("miningFilterBtn")?.addEventListener("click", () => renderMiningPipeline(miningPipelineCache));
+    document.getElementById("miningSearchInput")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") renderMiningPipeline(miningPipelineCache);
+    });
+    document.getElementById("leadDetailClose")?.addEventListener("click", closeLeadDetail);
+    document.getElementById("leadDetailModal")?.addEventListener("click", (e) => {
+      if (e.target.id === "leadDetailModal") closeLeadDetail();
+    });
     initAuth().then(() => {
       loadLeads();
       loadAnalytics();

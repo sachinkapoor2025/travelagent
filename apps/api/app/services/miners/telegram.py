@@ -51,6 +51,8 @@ async def _mine_via_bot() -> list[dict[str, Any]]:
                     "market": "uae",
                     "source": "telegram",
                     "source_detail": f"telegram:{msg.get('chat', {}).get('title', 'group')}",
+                    "travel_intent": "researching",
+                    "notes": text[:400].strip(),
                     "opt_in_marketing": True,
                 }
             )
@@ -79,7 +81,9 @@ async def _mine_via_public_preview() -> list[dict[str, Any]]:
                             "destination": _extract_destination(text),
                             "market": "uae" if "dubai" in channel.lower() or "uae" in channel.lower() else "india",
                             "source": "telegram",
-                            "source_detail": channel,
+                            "source_detail": f"telegram:{channel.lstrip('@')}",
+                            "travel_intent": "researching",
+                            "notes": text[:400].strip(),
                             "opt_in_marketing": True,
                         }
                     )

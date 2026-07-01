@@ -6,6 +6,9 @@ import enum
 class Market(str, enum.Enum):
     UAE = "uae"
     INDIA = "india"
+    UK = "uk"
+    US = "us"
+    AU = "au"
 
 
 class LeadStatus(str, enum.Enum):
@@ -33,6 +36,9 @@ class LeadSource(str, enum.Enum):
     APOLLO = "apollo"
     LINKEDIN = "linkedin"
     MANUAL = "manual"
+    REDDIT = "reddit"
+    TELEGRAM = "telegram"
+    DIRECTORIES = "directories"
 
 
 class CallDirection(str, enum.Enum):

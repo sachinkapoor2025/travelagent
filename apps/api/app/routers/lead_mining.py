@@ -9,7 +9,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from app.config import get_settings
 from app.services.lead_mining import lead_mining
 from app.services.mining_config import set_source_enabled
-from app.services.miners.orchestrator import run_all_enabled, run_source
+from app.services.miners.orchestrator import MINERS, run_all_enabled, run_source
 from app.services.worker_jobs import process_hot_leads
 
 logger = logging.getLogger(__name__)
@@ -39,10 +39,21 @@ async def toggle_source(source_id: str, enabled: bool = True) -> dict[str, Any]:
 
 
 @router.post("/run/{source_id}")
-async def run_miner(source_id: str, force: bool = True) -> dict[str, Any]:
-    """Run a single miner. Manual portal fetches pass force=True to bypass schedule toggle."""
+async def run_miner(source_id: str, force: bool = True, sync: bool = False) -> dict[str, Any]:
+    """Run a single miner. Portal fetches queue the Worker Lambda for all markets."""
+    if source_id not in MINERS and source_id not in {"clay", "apollo"}:
+        raise HTTPException(status_code=404, detail="Unknown source")
+    if source_id in {"clay", "apollo"}:
+        raise HTTPException(status_code=400, detail="Use webhook import for Clay/Apollo")
+    if not sync:
+        from app.services.miner_invoke import invoke_miner_async
+
+        result = invoke_miner_async(source_id)
+        if result.get("queued"):
+            return result
+        logger.warning("Async invoke failed, falling back to sync: %s", result.get("error"))
     try:
-        return await run_source(source_id, force=force)
+        return await run_source(source_id, force=force, fast=False)
     except Exception as exc:
         logger.exception("Miner run failed for %s", source_id)
         raise HTTPException(status_code=503, detail=f"Lead fetch failed: {exc}") from exc
