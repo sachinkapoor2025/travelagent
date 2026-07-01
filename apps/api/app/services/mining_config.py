@@ -9,7 +9,7 @@ from app.storage.dynamo import events_store
 DEFAULT_SOURCES: dict[str, dict[str, Any]] = {
     "reddit": {"enabled": True, "label": "Reddit", "schedule": "every 2 hours", "markets": ["uae", "india", "uk", "au", "us"]},
     "telegram": {"enabled": True, "label": "Telegram", "schedule": "every hour", "markets": ["uae", "india", "uk", "au", "us"]},
-    "directories": {"enabled": True, "label": "Google Maps & Directories", "schedule": "daily 3am UTC", "markets": ["uae", "india", "uk", "au", "us"]},
+    "directories": {"enabled": True, "label": "Google Maps & Directories (OSM free + SerpAPI optional)", "schedule": "daily 3am UTC", "markets": ["uae", "india", "uk", "au", "us"]},
     "clay": {"enabled": False, "label": "Clay Webhook", "schedule": "real-time", "markets": []},
     "apollo": {"enabled": False, "label": "Apollo Webhook", "schedule": "real-time", "markets": []},
 }
