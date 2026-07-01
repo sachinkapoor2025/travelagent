@@ -23,7 +23,7 @@ async def _run_miner(source_id: str) -> dict[str, Any]:
     from app.services.miners.orchestrator import run_source
 
     try:
-        return await run_source(source_id)
+        return await run_source(source_id, force=True, fast=False)
     except Exception as exc:
         logger.exception("Miner %s failed", source_id)
         return {"source": source_id, "error": str(exc)}

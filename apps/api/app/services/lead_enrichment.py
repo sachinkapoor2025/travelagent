@@ -38,6 +38,21 @@ class LeadEnrichmentService:
         enriched["temperature"] = temperature_from_score(enriched["score"])
         return enriched
 
+    async def enrich_fast(self, lead: dict[str, Any]) -> dict[str, Any]:
+        """Rule-based enrichment for bulk mining — avoids OpenAI per lead (Lambda timeout)."""
+        enriched = dict(lead)
+        enriched.setdefault("market", Market.UAE.value)
+        enriched.setdefault("preferred_language", self._guess_language(lead))
+        enriched.setdefault("travel_intent", self._guess_intent(lead))
+        enriched["enrichment"] = {
+            "employer": lead.get("employer") or lead.get("company"),
+            "location": lead.get("location") or lead.get("city"),
+            "source_detail": lead.get("source_detail") or lead.get("source"),
+        }
+        enriched["score"] = self._rule_score(enriched)
+        enriched["temperature"] = temperature_from_score(enriched["score"])
+        return enriched
+
     async def score_lead(self, lead: dict[str, Any]) -> int:
         if self.client:
             try:
@@ -70,6 +85,10 @@ Lead: {json.dumps({k: lead.get(k) for k in ['phone','name','origin','destination
         if lead.get("source") in {"linkedin", "clay", "apollo", "referral"}:
             score += 15
         if lead.get("employer"):
+            score += 5
+        if lead.get("phone") and lead.get("source") in {"directories", "reddit", "telegram"}:
+            score += 15
+        if lead.get("location"):
             score += 5
         return min(score, 100)
 

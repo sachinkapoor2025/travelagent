@@ -1,5 +1,6 @@
 """Lead mining, Clay webhooks, outbound campaigns, automated sources."""
 
+import logging
 from typing import Any, Optional
 
 from app.routers.auth import admin_required
@@ -11,6 +12,7 @@ from app.services.mining_config import set_source_enabled
 from app.services.miners.orchestrator import run_all_enabled, run_source
 from app.services.worker_jobs import process_hot_leads
 
+logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[admin_required()], prefix="/lead-mining", tags=["lead-mining"])
 settings = get_settings()
 
@@ -39,7 +41,11 @@ async def toggle_source(source_id: str, enabled: bool = True) -> dict[str, Any]:
 @router.post("/run/{source_id}")
 async def run_miner(source_id: str, force: bool = True) -> dict[str, Any]:
     """Run a single miner. Manual portal fetches pass force=True to bypass schedule toggle."""
-    return await run_source(source_id, force=force)
+    try:
+        return await run_source(source_id, force=force)
+    except Exception as exc:
+        logger.exception("Miner run failed for %s", source_id)
+        raise HTTPException(status_code=503, detail=f"Lead fetch failed: {exc}") from exc
 
 
 @router.post("/run-all")

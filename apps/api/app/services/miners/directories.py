@@ -38,11 +38,11 @@ SERP_QUERIES = [
 ]
 
 
-async def mine_directories() -> list[dict[str, Any]]:
+async def mine_directories(fast: bool = False) -> list[dict[str, Any]]:
     leads: list[dict[str, Any]] = []
-    if settings.serpapi_key:
+    if settings.serpapi_key and not fast:
         leads.extend(await _mine_serpapi())
-    leads.extend(await _mine_osm_overpass())
+    leads.extend(await _mine_osm_overpass(fast=fast))
     return _dedupe_leads(leads)
 
 
@@ -84,40 +84,66 @@ async def _mine_serpapi() -> list[dict[str, Any]]:
     return leads
 
 
-async def _mine_osm_overpass() -> list[dict[str, Any]]:
-    """Free travel-agency listings from OpenStreetMap — no API key required."""
-    leads: list[dict[str, Any]] = []
+async def _mine_osm_overpass(fast: bool = False) -> list[dict[str, Any]]:
+    """Free travel-agency listings from OpenStreetMap — parallel fetch with hard timeout."""
     headers = {"User-Agent": USER_AGENT}
+    markets = MARKET_GEO[:2] if fast else MARKET_GEO
+    wait_timeout = 16.0 if fast else 40.0
 
-    async with httpx.AsyncClient(timeout=45.0, headers=headers) as client:
-        for label, lat, lon, market in MARKET_GEO:
-            query = (
-                f"[out:json][timeout:25];("
-                f'node["office"="travel_agency"](around:35000,{lat},{lon});'
-                f'node["shop"="travel_agency"](around:35000,{lat},{lon});'
-                f'node["tourism"="travel_agency"](around:35000,{lat},{lon});'
-                f");out body 20;"
-            )
+    async with httpx.AsyncClient(timeout=18.0 if fast else 30.0, headers=headers) as client:
+        tasks = [
+            asyncio.create_task(_fetch_osm_market(client, label, lat, lon, market))
+            for label, lat, lon, market in markets
+        ]
+        done, pending = await asyncio.wait(tasks, timeout=wait_timeout)
+        for task in pending:
+            task.cancel()
+
+        leads: list[dict[str, Any]] = []
+        for task in done:
             try:
-                resp = None
-                for base_url in OVERPASS_URLS:
-                    resp = await client.get(base_url, params={"data": query})
-                    if resp.status_code == 200:
-                        break
-                    if resp.status_code == 429:
-                        await asyncio.sleep(2.5)
-                if not resp or resp.status_code != 200:
-                    logger.warning("Overpass %s returned %s", label, resp.status_code if resp else "none")
-                    await asyncio.sleep(2.0)
-                    continue
-                for element in resp.json().get("elements", []):
-                    lead = _osm_element_to_lead(element, market, label)
-                    if lead:
-                        leads.append(lead)
-            except Exception:
-                logger.exception("OSM Overpass miner failed for %s", label)
-            await asyncio.sleep(2.0)
+                batch = task.result()
+                if batch:
+                    leads.extend(batch)
+            except Exception as exc:
+                logger.warning("OSM batch error: %s", exc)
+
     return [lead for lead in leads if lead.get("phone")]
+
+
+async def _fetch_osm_market(
+    client: httpx.AsyncClient,
+    label: str,
+    lat: float,
+    lon: float,
+    market: str,
+) -> list[dict[str, Any]]:
+    query = (
+        f"[out:json][timeout:15];("
+        f'node["office"="travel_agency"](around:35000,{lat},{lon});'
+        f'node["shop"="travel_agency"](around:35000,{lat},{lon});'
+        f'node["tourism"="travel_agency"](around:35000,{lat},{lon});'
+        f");out body 15;"
+    )
+    leads: list[dict[str, Any]] = []
+    try:
+        resp = None
+        for base_url in OVERPASS_URLS:
+            resp = await client.get(base_url, params={"data": query})
+            if resp.status_code == 200:
+                break
+            if resp.status_code == 429:
+                await asyncio.sleep(1.0)
+        if not resp or resp.status_code != 200:
+            logger.warning("Overpass %s returned %s", label, resp.status_code if resp else "none")
+            return leads
+        for element in resp.json().get("elements", []):
+            lead = _osm_element_to_lead(element, market, label)
+            if lead:
+                leads.append(lead)
+    except Exception:
+        logger.exception("OSM Overpass miner failed for %s", label)
+    return leads
 
 
 def _osm_element_to_lead(element: dict[str, Any], market: str, label: str) -> dict[str, Any] | None:
