@@ -20,6 +20,7 @@ parameter_overrides = "Environment=staging"
 [prod.deploy.parameters]
 stack_name = "travel-ai-prod"
 resolve_s3 = true
+resolve_image_repos = true
 s3_prefix = "travel-ai"
 region = "ap-south-1"
 capabilities = "CAPABILITY_IAM"

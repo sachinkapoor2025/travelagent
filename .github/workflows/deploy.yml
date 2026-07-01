@@ -86,6 +86,7 @@ jobs:
             --config-env prod \
             --capabilities CAPABILITY_IAM \
             --resolve-s3 \
+            --resolve-image-repos \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
