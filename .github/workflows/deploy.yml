@@ -46,24 +46,53 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup AWS credentials
+      - name: Verify AWS credentials
         shell: bash
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          RAW_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          RAW_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
-          if [[ -z "${AWS_ACCESS_KEY_ID}" || -z "${AWS_SECRET_ACCESS_KEY}" ]]; then
-            echo "::error::Add GitHub secrets: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+
+          # Strip whitespace/newlines (common when pasting into GitHub Secrets)
+          KEY_ID="$(printf '%s' "${RAW_ACCESS_KEY_ID}" | tr -d '[:space:]')"
+          SECRET="$(printf '%s' "${RAW_SECRET_ACCESS_KEY}" | tr -d '[:space:]')"
+
+          if [[ -z "${KEY_ID}" || -z "${SECRET}" ]]; then
+            echo "::error::GitHub secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are empty."
             exit 1
           fi
-          echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> "$GITHUB_ENV"
-          echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> "$GITHUB_ENV"
+
+          echo "Access key prefix: ${KEY_ID:0:4}***"
+          echo "Access key length: ${#KEY_ID} (expected 20 for AKIA keys)"
+          echo "Secret key length: ${#SECRET} (expected 40)"
+
+          if [[ "${#KEY_ID}" -ne 20 ]]; then
+            echo "::error::AWS_ACCESS_KEY_ID length is ${#KEY_ID}, expected 20. Re-paste the key with no spaces."
+            exit 1
+          fi
+          if [[ "${#SECRET}" -ne 40 ]]; then
+            echo "::error::AWS_SECRET_ACCESS_KEY length is ${#SECRET}, expected 40. Re-paste the secret with no spaces."
+            exit 1
+          fi
+          if [[ "${KEY_ID}" != AKIA* ]]; then
+            echo "::error::Access key must start with AKIA (permanent IAM user key)."
+            exit 1
+          fi
+
+          # Clear any org/runner session token — permanent keys must not send one
+          unset AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+          export AWS_ACCESS_KEY_ID="${KEY_ID}"
+          export AWS_SECRET_ACCESS_KEY="${SECRET}"
+          export AWS_DEFAULT_REGION="${AWS_REGION}"
+          export AWS_REGION="${AWS_REGION}"
+
+          echo "AWS_ACCESS_KEY_ID=${KEY_ID}" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=${SECRET}" >> "$GITHUB_ENV"
           echo "AWS_DEFAULT_REGION=${AWS_REGION}" >> "$GITHUB_ENV"
           echo "AWS_REGION=${AWS_REGION}" >> "$GITHUB_ENV"
 
-      - name: Verify AWS identity
-        run: aws sts get-caller-identity
+          aws sts get-caller-identity
 
       - uses: aws-actions/setup-sam@v2
 
