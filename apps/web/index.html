@@ -1287,9 +1287,10 @@
           <thead>
             <tr>
               <th>Type</th>
-              <th>Name</th>
-              <th>Phone</th>
+              <th>Name / deal</th>
+              <th>Contact</th>
               <th>Route</th>
+              <th>Dates / price</th>
               <th>Location</th>
               <th>Source</th>
               <th>Market</th>
@@ -1836,7 +1837,22 @@
     function formatLeadDates(lead) {
       const dep = lead.departure_date || "—";
       const ret = lead.return_date ? ` → ${lead.return_date}` : "";
-      return `${dep}${ret}`;
+      const price = lead.budget_max ? ` · ${lead.budget_max}` : "";
+      return `${dep}${ret}${price}`;
+    }
+
+    function displayLeadName(lead) {
+      if (lead.name && lead.name !== "—") return lead.name;
+      if (lead.notes) {
+        const short = lead.notes.split(/[.!?\n]/)[0].trim().slice(0, 70);
+        return short ? short + (lead.notes.length > 70 ? "…" : "") : "—";
+      }
+      return "—";
+    }
+
+    function displayLeadPhone(lead) {
+      if (lead.contact_synthetic) return "Deal post";
+      return lead.phone || "—";
     }
 
     function marketFilterActive(value) {
@@ -1895,9 +1911,10 @@
       tbody.innerHTML = filtered.map((row) => `
         <tr class="lead-row-clickable" data-lead-id="${escapeHtml(row.id || "")}">
           <td>${segmentPillHtml(row.lead_segment, row.segment_label)}</td>
-          <td>${escapeHtml(row.name || "—")}</td>
-          <td>${escapeHtml(row.phone || "—")}</td>
-          <td>${escapeHtml(row.route || "—")}</td>
+          <td><div>${escapeHtml(displayLeadName(row))}</div>${row.notes ? `<div class="meta" style="font-size:0.72rem;color:var(--text-muted);max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(row.notes.slice(0, 80))}</div>` : ""}</td>
+          <td>${escapeHtml(displayLeadPhone(row))}</td>
+          <td>${escapeHtml(row.route || `${row.origin || "—"} → ${row.destination || "—"}`)}</td>
+          <td>${escapeHtml(formatLeadDates(row))}</td>
           <td>${escapeHtml(row.location || "—")}</td>
           <td>${sourcePillHtml(row.source, row.source_label)}</td>
           <td>${escapeHtml((row.market || "—").toUpperCase())}</td>
@@ -1921,7 +1938,7 @@
       const subtitle = document.getElementById("leadDetailSubtitle");
       const body = document.getElementById("leadDetailBody");
       const label = lead.source_label || lead.source || "Lead";
-      title.textContent = lead.name || lead.phone || "Lead details";
+      title.textContent = displayLeadName(lead);
       const segLabel = lead.segment_label || (lead.lead_segment === "b2c" ? "B2C" : lead.lead_segment === "b2b" ? "B2B" : "");
       subtitle.textContent = `${segLabel} · ${label} · ${(lead.market || "").toUpperCase()} · Score ${lead.score ?? "—"}`;
       const phoneDisplay = lead.contact_synthetic ? `${lead.phone} (contact via platform)` : lead.phone;
@@ -1934,6 +1951,7 @@
         ["Departure", lead.departure_date],
         ["Return", lead.return_date],
         ["Passengers", lead.passengers],
+        ["Budget", lead.budget_max ? String(lead.budget_max) : null],
         ["Travel intent", lead.travel_intent || lead.enrichment?.travel_intent],
         ["Source", lead.source_label || lead.source],
         ["Source detail", lead.source_detail || lead.enrichment?.source_detail],
@@ -2102,9 +2120,9 @@
             (l) => `
           <tr class="lead-row-clickable" data-lead-id="${escapeHtml(l.id)}">
             <td>${segmentPillHtml(l.lead_segment, l.segment_label)}</td>
-            <td>${escapeHtml(l.name || "—")}</td>
-            <td>${escapeHtml(l.contact_synthetic ? "—" : l.phone)}${l.contact_synthetic ? ' <span class="meta">(platform)</span>' : ""}</td>
-            <td>${escapeHtml(l.origin || "—")} → ${escapeHtml(l.destination || "—")}</td>
+            <td>${escapeHtml(displayLeadName(l))}</td>
+            <td>${escapeHtml(displayLeadPhone(l))}</td>
+            <td>${escapeHtml(l.route || `${l.origin || "—"} → ${l.destination || "—"}`)}</td>
             <td>${escapeHtml(formatLeadDates(l))}</td>
             <td>${sourcePillHtml(l.source, l.source_label)}</td>
             <td>${escapeHtml((l.market || "—").toUpperCase())}</td>

@@ -1,4 +1,4 @@
-"""Telegram B2C miner — bot updates + optional public channel list."""
+"""Telegram B2C miner — bot updates + public channel previews with rich parsing."""
 
 from __future__ import annotations
 
@@ -9,12 +9,13 @@ from typing import Any
 import httpx
 
 from app.config import get_settings
+from app.services.miners.travel_parse import parse_travel_text
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
 TRAVEL_KW = re.compile(
-    r"\b(flight|ticket|visa|hotel|package|travel|trip|dubai|delhi|mumbai|melbourne|london|paris|tokyo|bali|booking|need|looking)\b",
+    r"\b(flight|ticket|visa|hotel|package|travel|trip|dubai|delhi|mumbai|melbourne|london|paris|tokyo|bali|booking|need|looking|deal|fare|airfare)\b",
     re.I,
 )
 PHONE_RE = re.compile(r"(\+?\d{10,14})")
@@ -44,7 +45,7 @@ def _channel_list() -> list[str]:
 
 
 async def mine_telegram() -> list[dict[str, Any]]:
-    """Mine from bot updates and any configured public channel previews."""
+    """Mine from bot updates and public channel previews."""
     global _last_warning
     leads: list[dict[str, Any]] = []
     bot_count = 0
@@ -92,18 +93,20 @@ async def _mine_via_bot() -> list[dict[str, Any]]:
             phone_match = PHONE_RE.search(text)
             from_user = msg.get("from") or {}
             chat = msg.get("chat") or {}
+            channel = chat.get("username") or chat.get("title") or "chat"
+            display_name = from_user.get("first_name") or from_user.get("username")
             leads.append(_lead_from_text(
                 text,
-                name=from_user.get("first_name") or from_user.get("username"),
+                name=display_name,
                 phone=phone_match.group(1) if phone_match else "",
-                source_detail=f"telegram:{chat.get('title') or chat.get('username') or 'chat'}",
+                channel=channel if not display_name else None,
+                source_detail=f"telegram:{chat.get('title') or channel}",
                 external_id=f"telegram:{msg.get('message_id', update.get('update_id'))}",
             ))
     return leads
 
 
 async def _mine_via_public_preview() -> list[dict[str, Any]]:
-    """Best-effort scrape of t.me/s previews (may return empty if Telegram changes HTML)."""
     leads: list[dict[str, Any]] = []
     async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
         for channel in _channel_list()[:12]:
@@ -118,7 +121,7 @@ async def _mine_via_public_preview() -> list[dict[str, Any]]:
                     re.DOTALL,
                 )
                 if not snippets:
-                    snippets = re.findall(r'dir="auto"[^>]*>([^<]{20,500})', html)
+                    snippets = re.findall(r'dir="auto"[^>]*>([^<]{20,800})', html)
                 for raw in snippets[:15]:
                     text = re.sub(r"<[^>]+>", " ", raw).strip()
                     text = re.sub(r"\s+", " ", text)
@@ -128,8 +131,9 @@ async def _mine_via_public_preview() -> list[dict[str, Any]]:
                     leads.append(_lead_from_text(
                         text,
                         phone=phone_match.group(1) if phone_match else "",
+                        channel=channel.lstrip("@"),
                         source_detail=f"telegram:@{channel.lstrip('@')}",
-                        external_id=f"telegram:{channel}:{text[:50]}",
+                        external_id=f"telegram:{channel}:{hash(text) % 10**12}",
                     ))
             except Exception:
                 logger.exception("Telegram preview failed for %s", channel)
@@ -141,22 +145,30 @@ def _lead_from_text(
     *,
     name: str | None = None,
     phone: str = "",
+    channel: str | None = None,
     source_detail: str = "telegram",
     external_id: str = "",
 ) -> dict[str, Any]:
-    return {
-        "name": name,
+    parsed = parse_travel_text(text, channel=channel)
+    lead: dict[str, Any] = {
         "phone": phone,
-        "destination": _extract_destination(text),
-        "market": _market_from_text(text),
         "source": "telegram",
         "source_detail": source_detail,
         "external_id": external_id or f"telegram:{hash(text) % 10**10}",
         "lead_segment": "b2c",
-        "travel_intent": "researching",
-        "notes": text[:500].strip(),
+        "notes": text[:800].strip(),
         "opt_in_marketing": True,
     }
+    for key in ("origin", "destination", "departure_date", "return_date", "passengers", "budget_max", "location", "travel_intent"):
+        if parsed.get(key):
+            lead[key] = parsed[key]
+    if name:
+        lead["name"] = name
+    elif parsed.get("name"):
+        lead["name"] = parsed["name"]
+    if not lead.get("destination"):
+        lead["destination"] = parsed.get("destination")
+    return lead
 
 
 def _dedupe(leads: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -168,28 +180,3 @@ def _dedupe(leads: list[dict[str, Any]]) -> list[dict[str, Any]]:
             seen.add(key)
             out.append(lead)
     return out
-
-
-def _market_from_text(text: str) -> str:
-    lower = text.lower()
-    if any(x in lower for x in ("dubai", "uae", "abu dhabi")):
-        return "uae"
-    if any(x in lower for x in ("india", "delhi", "mumbai")):
-        return "india"
-    if any(x in lower for x in ("london", " uk ", "britain")):
-        return "uk"
-    if any(x in lower for x in ("australia", "melbourne", "sydney")):
-        return "au"
-    return "global"
-
-
-def _extract_destination(text: str) -> str | None:
-    lower = text.lower()
-    for name, code in {
-        "dubai": "DXB", "delhi": "DEL", "mumbai": "BOM", "melbourne": "MEL",
-        "london": "LHR", "paris": "CDG", "tokyo": "NRT", "bali": "DPS",
-        "bangkok": "BKK", "singapore": "SIN",
-    }.items():
-        if name in lower:
-            return code
-    return None
