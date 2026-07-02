@@ -57,6 +57,14 @@ class LeadResponse(BaseModel):
     lead_segment: Optional[LeadSegment] = None
     segment_label: Optional[str] = None
     contact_synthetic: Optional[bool] = None
+    post_url: Optional[str] = None
+    contact_url: Optional[str] = None
+    route: Optional[str] = None
+    scored: Optional[bool] = None
+    lead_category: Optional[str] = None
+    scorer_action: Optional[str] = None
+    call_opener: Optional[str] = None
+    whatsapp_message: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

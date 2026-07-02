@@ -91,6 +91,10 @@ jobs:
           REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNELS: ${{ secrets.TELEGRAM_CHANNELS }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_SESSION_STRING: ${{ secrets.TELEGRAM_SESSION_STRING }}
+          TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
         run: |
           cd infrastructure
@@ -121,6 +125,10 @@ jobs:
             RedditClientSecret=${REDDIT_CLIENT_SECRET:-} \
             TelegramBotToken=${TELEGRAM_BOT_TOKEN:-} \
             TelegramChannels=${TELEGRAM_CHANNELS:-} \
+            TelegramApiId=${TELEGRAM_API_ID:-} \
+            TelegramApiHash=${TELEGRAM_API_HASH:-} \
+            TelegramSessionString=${TELEGRAM_SESSION_STRING:-} \
+            TwitterBearerToken=${TWITTER_BEARER_TOKEN:-} \
             SerpApiKey=${SERPAPI_KEY:-}"
 
       - name: Fetch CloudFormation Outputs

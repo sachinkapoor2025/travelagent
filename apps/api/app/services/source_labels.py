@@ -24,7 +24,19 @@ def source_display_label(source: Optional[str], source_detail: Optional[str] = N
             return f"Reddit · {source_detail.split('·', 1)[0].strip()}"
         return "Reddit"
 
+    if src == "reddit_rss":
+        if detail and detail.startswith("r/"):
+            return f"Reddit RSS · {detail}"
+        return "Reddit RSS"
+
+    if src == "twitter":
+        if detail:
+            return f"Twitter · {detail}"
+        return "Twitter"
+
     if src == "telegram":
+        if detail and "telegram_group" in detail:
+            return f"Telegram Group · {detail.split(':')[-1]}"
         if detail.startswith("telegram:"):
             channel = source_detail.split(":", 1)[1] if source_detail else "group"
             return f"Telegram · {channel}"

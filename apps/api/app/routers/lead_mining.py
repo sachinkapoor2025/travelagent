@@ -11,6 +11,8 @@ from app.services.lead_mining import lead_mining
 from app.services.mining_config import get_sources
 from app.services.mining_progress import DEFAULT_BATCH_SIZE, get_progress, reset_progress
 from app.services.miners.orchestrator import MINERS, run_all_enabled, run_source_batch
+
+KNOWN_SOURCES = set(MINERS) | {"directories", "clay", "apollo", "telegram", "reddit_rss", "twitter"}
 from app.services.worker_jobs import process_hot_leads
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,7 @@ settings = get_settings()
 async def mining_dashboard() -> dict[str, Any]:
     data = await lead_mining.dashboard()
     progress = {}
-    for source_id in ("b2b", "b2c", "directories", "reddit", "telegram"):
+    for source_id in ("reddit_rss", "telegram", "twitter", "b2c", "b2b", "directories"):
         progress[source_id] = get_progress(source_id)
     data["progress"] = progress
     return data
@@ -30,7 +32,7 @@ async def mining_dashboard() -> dict[str, Any]:
 
 @router.get("/progress/{source_id}")
 async def mining_progress(source_id: str) -> dict[str, Any]:
-    if source_id not in MINERS and source_id not in {"directories", "clay", "apollo"}:
+    if source_id not in KNOWN_SOURCES:
         raise HTTPException(status_code=404, detail="Unknown source")
     return get_progress(source_id)
 
@@ -61,7 +63,7 @@ async def run_miner(
     reset: bool = False,
 ) -> dict[str, Any]:
     """Queue or run a batched miner (100–200 leads per batch, worldwide)."""
-    if source_id not in MINERS and source_id not in {"directories", "clay", "apollo"}:
+    if source_id not in KNOWN_SOURCES:
         raise HTTPException(status_code=404, detail="Unknown source")
     if source_id in {"clay", "apollo"}:
         raise HTTPException(status_code=400, detail="Use webhook import for Clay/Apollo")
@@ -96,7 +98,7 @@ async def run_miner(
 
 @router.post("/reset/{source_id}")
 async def reset_miner_progress(source_id: str) -> dict[str, Any]:
-    if source_id not in MINERS and source_id != "directories":
+    if source_id not in KNOWN_SOURCES:
         raise HTTPException(status_code=404, detail="Unknown source")
     segment = "b2b" if source_id in {"b2b", "directories"} else "b2c"
     return reset_progress(source_id, segment=segment)

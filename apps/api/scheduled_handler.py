@@ -3,24 +3,47 @@
 import asyncio
 import json
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger("travel-ai-scheduled")
 logger.setLevel(logging.INFO)
 
+MINER_JOBS = {
+    "reddit",
+    "reddit_rss",
+    "telegram",
+    "twitter",
+    "directories",
+    "b2b",
+    "b2c",
+    "score_leads",
+}
+
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    job = event.get("job") or event.get("detail", {}).get("job")
-    miner_jobs = {"reddit", "telegram", "directories", "b2b", "b2c"}
-    if job in miner_jobs:
-        results = asyncio.run(_run_miner(job, event))
+    job = event.get("job") or event.get("detail", {}).get("job") or os.environ.get("SCRAPER_JOB")
+    if job in MINER_JOBS:
+        results = asyncio.run(_run_miner_job(job, event))
         return {"statusCode": 200, "body": json.dumps(results)}
 
     results = asyncio.run(_run_all_jobs())
     return {"statusCode": 200, "body": json.dumps(results)}
 
 
-async def _run_miner(source_id: str, event: dict[str, Any]) -> dict[str, Any]:
+async def _run_miner_job(job: str, event: dict[str, Any]) -> dict[str, Any]:
+    if job == "score_leads":
+        from app.services.lead_scorer import score_unscored_leads
+
+        limit = int(event.get("limit") or 40)
+        return await score_unscored_leads(limit=limit)
+
+    if job in {"reddit_rss", "twitter"}:
+        from app.services.miners.b2c_import import import_b2c_leads
+        from app.services.miners.orchestrator import run_scraper_import
+
+        return await run_scraper_import(job)
+
     from app.services.miners.orchestrator import run_source_batch
 
     batch_size = int(event.get("batch_size") or 150)
@@ -28,15 +51,19 @@ async def _run_miner(source_id: str, event: dict[str, Any]) -> dict[str, Any]:
     reset = bool(event.get("reset", False))
     try:
         return await run_source_batch(
-            source_id,
+            job,
             force=True,
             batch_size=batch_size,
             cursor=cursor,
             reset=reset,
         )
     except Exception as exc:
-        logger.exception("Miner %s failed", source_id)
-        return {"source": source_id, "error": str(exc)}
+        logger.exception("Miner %s failed", job)
+        return {"source": job, "error": str(exc)}
+
+
+async def _run_miner(source_id: str, event: dict[str, Any]) -> dict[str, Any]:
+    return await _run_miner_job(source_id, event)
 
 
 async def _run_all_jobs() -> dict[str, Any]:

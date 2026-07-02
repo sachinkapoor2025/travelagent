@@ -23,9 +23,18 @@ _EXTRA_FIELDS = (
     "temperature",
     "preferred_language",
     "lead_segment",
+    "lead_category",
     "contact_synthetic",
     "call_ready",
     "external_id",
+    "post_url",
+    "contact_url",
+    "scored",
+    "scorer_action",
+    "scorer_reason",
+    "call_opener",
+    "whatsapp_message",
+    "message_at",
 )
 
 
@@ -174,16 +183,49 @@ class LeadRepository:
             leads = [l for l in leads if l.get("source") == source]
         if segment:
             leads = [l for l in leads if l.get("lead_segment") == segment]
+            if segment == "b2c":
+                leads = [
+                    l for l in leads
+                    if l.get("lead_category") not in {"deal_channel", "discarded", "b2b"}
+                ]
         if q:
             leads = [l for l in leads if _matches_query(l, q)]
         leads.sort(
             key=lambda x: (
-                1 if x.get("lead_segment") == "b2c" else 0,
+                0 if x.get("lead_segment") == "b2c" and x.get("lead_category") not in {"deal_channel", "discarded", "b2b"} else 1,
+                -(x.get("score") or 0),
                 x.get("created_at", ""),
             ),
-            reverse=True,
         )
         return leads[:limit]
+
+    async def list_unscored_leads(self, limit: int = 30) -> list[dict[str, Any]]:
+        items = leads_store().query_gsi1("LEADS", limit=max(limit * 4, 200))
+        leads = [_dict_to_lead(i) for i in items]
+        unscored = [
+            l for l in leads
+            if l.get("scored") is False and l.get("lead_category") not in {"deal_channel", "discarded", "b2b"}
+        ]
+        unscored.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return unscored[:limit]
+
+    async def update_lead_fields(self, lead_id: str, fields: dict[str, Any]) -> None:
+        store = leads_store()
+        existing = store.get(f"LEAD#{lead_id}", "METADATA")
+        if not existing:
+            return
+        record = dict(existing)
+        record.update(fields)
+        record["updated_at"] = now_iso()
+        score = int(record.get("score", 0))
+        ts = record.get("created_at") or now_iso()
+        store.put(
+            f"LEAD#{lead_id}",
+            "METADATA",
+            record,
+            gsi1pk="LEADS",
+            gsi1sk=f"{score:03d}#{ts}",
+        )
 
     async def get_by_id(self, lead_id: str) -> Optional[dict[str, Any]]:
         item = leads_store().get(f"LEAD#{lead_id}", "METADATA")

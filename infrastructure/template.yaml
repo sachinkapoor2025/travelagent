@@ -84,6 +84,21 @@ Parameters:
     Type: String
     Default: ""
     NoEcho: true
+  TelegramApiId:
+    Type: String
+    Default: ""
+  TelegramApiHash:
+    Type: String
+    Default: ""
+    NoEcho: true
+  TelegramSessionString:
+    Type: String
+    Default: ""
+    NoEcho: true
+  TwitterBearerToken:
+    Type: String
+    Default: ""
+    NoEcho: true
 
 Globals:
   Function:
@@ -134,6 +149,10 @@ Globals:
         REDDIT_CLIENT_SECRET: !Ref RedditClientSecret
         TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
         TELEGRAM_CHANNELS: !Ref TelegramChannels
+        TELEGRAM_API_ID: !Ref TelegramApiId
+        TELEGRAM_API_HASH: !Ref TelegramApiHash
+        TELEGRAM_SESSION_STRING: !Ref TelegramSessionString
+        TWITTER_BEARER_TOKEN: !Ref TwitterBearerToken
         SERPAPI_KEY: !Ref SerpApiKey
         WORKER_FUNCTION_NAME: !Sub travel-ai-worker-${Environment}
 
@@ -503,31 +522,119 @@ Resources:
             Schedule: rate(2 minutes)
             Description: Hot leads, price alerts, and nurture emails
             Enabled: true
-        RedditMinerSchedule:
-          Type: Schedule
-          Properties:
-            Schedule: rate(2 hours)
-            Description: Reddit lead mining
-            Enabled: true
-            Input: '{"job":"reddit"}'
-        TelegramMinerSchedule:
-          Type: Schedule
-          Properties:
-            Schedule: rate(1 hour)
-            Description: Telegram lead mining
-            Enabled: true
-            Input: '{"job":"telegram"}'
         DirectoriesMinerSchedule:
           Type: Schedule
           Properties:
             Schedule: cron(0 3 * * ? *)
-            Description: Google Maps and directory lead mining
+            Description: Google Maps and directory lead mining (B2B)
             Enabled: true
             Input: '{"job":"directories"}'
     Metadata:
       DockerTag: travel-ai-worker
       DockerContext: ../apps/api
       Dockerfile: Dockerfile.worker
+
+  LeadScraperRedditRssFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub travel-ai-lead-scraper-reddit-rss-${Environment}
+      PackageType: Image
+      Timeout: 900
+      Environment:
+        Variables:
+          SCRAPER_JOB: reddit_rss
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LeadsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+      Events:
+        RedditRssSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(2 hours)
+            Description: Reddit RSS B2C buyer intent
+            Enabled: true
+    Metadata:
+      DockerTag: travel-ai-scraper-reddit
+      DockerContext: ../apps/api
+      Dockerfile: Dockerfile.scraper
+
+  LeadScraperTwitterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub travel-ai-lead-scraper-twitter-${Environment}
+      PackageType: Image
+      Timeout: 900
+      Environment:
+        Variables:
+          SCRAPER_JOB: twitter
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LeadsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+      Events:
+        TwitterSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(3 hours)
+            Description: Twitter/X B2C buyer intent
+            Enabled: true
+    Metadata:
+      DockerTag: travel-ai-scraper-twitter
+      DockerContext: ../apps/api
+      Dockerfile: Dockerfile.scraper
+
+  LeadScraperTelegramGroupsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub travel-ai-lead-scraper-telegram-groups-${Environment}
+      PackageType: Image
+      Timeout: 900
+      Environment:
+        Variables:
+          SCRAPER_JOB: telegram
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LeadsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+      Events:
+        TelegramGroupsSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(30 minutes)
+            Description: Telegram group B2C buyer intent
+            Enabled: true
+    Metadata:
+      DockerTag: travel-ai-scraper-telegram
+      DockerContext: ../apps/api
+      Dockerfile: Dockerfile.scraper
+
+  LeadScorerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub travel-ai-lead-scorer-${Environment}
+      PackageType: Image
+      Timeout: 300
+      Environment:
+        Variables:
+          SCRAPER_JOB: score_leads
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LeadsTable
+      Events:
+        LeadScorerSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(15 minutes)
+            Description: LLM buyer-intent qualification
+            Enabled: true
+    Metadata:
+      DockerTag: travel-ai-lead-scorer
+      DockerContext: ../apps/api
+      Dockerfile: Dockerfile.scraper
 
   # =====================================================
   # FRONTEND PORTAL (S3 + CloudFront HTTPS)

@@ -1086,6 +1086,12 @@
         <span>Click a row for full details · auto-refreshes every 15s</span>
       </div>
       <div class="lead-filters">
+        <div class="segment-quick-filters" style="grid-column:1/-1;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:0.25rem">
+          <span class="field-label" style="margin:0">Show:</span>
+          <button type="button" class="btn btn-sm segment-quick" data-segment="">All</button>
+          <button type="button" class="btn btn-sm btn-primary segment-quick active" data-segment="b2c">B2C Only</button>
+          <button type="button" class="btn btn-sm segment-quick" data-segment="b2b">B2B Only</button>
+        </div>
         <div>
           <label class="field-label">Search worldwide</label>
           <input id="leadSearchInput" type="search" placeholder="Any country, city, phone, route, name…" />
@@ -1098,7 +1104,7 @@
           <label class="field-label">Type</label>
           <select id="leadSegmentFilter">
             <option value="">All types</option>
-            <option value="b2c">B2C — consumers (priority)</option>
+            <option value="b2c" selected>B2C — consumers (priority)</option>
             <option value="b2b">B2B — agencies</option>
           </select>
         </div>
@@ -1108,9 +1114,11 @@
             <option value="">All sources</option>
             <option value="b2c">B2C bundle</option>
             <option value="b2b">B2B bundle</option>
-            <option value="directories">Google Maps / Directories</option>
-            <option value="reddit">Reddit</option>
-            <option value="telegram">Telegram</option>
+            <option value="directories">Google Maps / Directories (B2B)</option>
+            <option value="reddit_rss">Reddit RSS (B2C)</option>
+            <option value="reddit">Reddit OAuth</option>
+            <option value="telegram">Telegram Groups</option>
+            <option value="twitter">Twitter/X</option>
             <option value="manual">Manual</option>
           </select>
         </div>
@@ -1275,9 +1283,10 @@
             <option value="">All</option>
             <option value="b2b">B2B bundle</option>
             <option value="b2c">B2C bundle</option>
-            <option value="directories">Google Maps</option>
-            <option value="reddit">Reddit</option>
-            <option value="telegram">Telegram</option>
+            <option value="directories">Google Maps (B2B)</option>
+            <option value="reddit_rss">Reddit RSS</option>
+            <option value="telegram">Telegram Groups</option>
+            <option value="twitter">Twitter/X</option>
           </select>
         </div>
         <button type="button" class="btn btn-sm" id="miningFilterBtn">Filter</button>
@@ -1830,8 +1839,31 @@
 
     function sourcePillHtml(source, label) {
       const text = label || source || "Unknown";
-      const cls = ["directories", "reddit", "telegram"].includes(source) ? source : "";
+      const src = (source || "").replace("_rss", "");
+      const cls = ["directories", "reddit", "telegram", "twitter"].includes(src) ? src : "";
       return `<span class="source-pill ${cls}">${escapeHtml(text)}</span>`;
+    }
+
+    function leadActionButtons(l) {
+      const url = l.post_url || l.contact_url;
+      const synthetic = l.contact_synthetic || !extractRealPhone(l);
+      if (url && synthetic) {
+        if ((l.source || "").includes("reddit")) {
+          return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="btn btn-sm btn-primary" onclick="event.stopPropagation()">Reply on Reddit</a>`;
+        }
+        if (l.source === "telegram" || (l.source_detail || "").includes("telegram_group")) {
+          return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="btn btn-sm btn-primary" onclick="event.stopPropagation()">Open Telegram</a>`;
+        }
+        if (l.source === "twitter") {
+          return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="btn btn-sm btn-primary" onclick="event.stopPropagation()">Open Twitter</a>`;
+        }
+      }
+      return `<button class="btn btn-sm" onclick="event.stopPropagation(); callLead('${l.id}')">Call</button>`;
+    }
+
+    function extractRealPhone(lead) {
+      if (lead.contact_synthetic) return "";
+      return lead.phone || "";
     }
 
     function formatLeadDates(lead) {
@@ -1977,7 +2009,8 @@
           </div>
         ` : ""}
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.25rem">
-          <button type="button" class="btn btn-sm btn-primary" onclick="callLead('${lead.id}')">Call lead</button>
+          ${lead.post_url ? `<a href="${escapeHtml(lead.post_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-primary">Open post</a>` : ""}
+          ${leadActionButtons(lead)}
           <button type="button" class="btn btn-sm" onclick="dncLead('${lead.id}')">Add to DNC</button>
         </div>
       `;
@@ -2130,7 +2163,7 @@
             <td><span class="badge ${l.score >= 80 ? "hot" : l.score >= 50 ? "warm" : ""}">${l.score}</span></td>
             <td>${escapeHtml(l.status)}</td>
             <td>
-              <button class="btn btn-sm" onclick="event.stopPropagation(); callLead('${l.id}')">Call</button>
+              ${leadActionButtons(l)}
               <button class="btn btn-sm" onclick="event.stopPropagation(); dncLead('${l.id}')">DNC</button>
             </td>
           </tr>`
@@ -2502,6 +2535,18 @@
     initAirportAutocomplete();
     initPhoneInputs();
     document.getElementById("leadFilterBtn")?.addEventListener("click", () => loadLeads());
+    document.querySelectorAll(".segment-quick").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".segment-quick").forEach((b) => {
+          b.classList.remove("active", "btn-primary");
+        });
+        btn.classList.add("active", "btn-primary");
+        const seg = btn.dataset.segment || "";
+        const sel = document.getElementById("leadSegmentFilter");
+        if (sel) sel.value = seg;
+        loadLeads();
+      });
+    });
     document.getElementById("leadSearchInput")?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") loadLeads();
     });

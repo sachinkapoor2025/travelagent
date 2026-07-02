@@ -7,7 +7,7 @@ from typing import Any, Optional
 from app.services.miners.telegram_intent import stable_digest
 
 B2B_SOURCES = {"directories", "clay", "apollo", "linkedin", "partner"}
-B2C_SOURCES = {"reddit", "telegram", "website", "whatsapp", "voice_inbound", "voice_outbound", "google_ads", "meta_ads", "referral", "abandoned_search", "manual"}
+B2C_SOURCES = {"reddit", "reddit_rss", "telegram", "twitter", "website", "whatsapp", "voice_inbound", "voice_outbound", "google_ads", "meta_ads", "referral", "abandoned_search", "manual"}
 
 
 def classify_segment(source: Optional[str], explicit: Optional[str] = None) -> str:

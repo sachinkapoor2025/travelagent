@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     reddit_user_agent: str = "TravelAI-LeadMiner/1.0"
     telegram_bot_token: str = ""
     telegram_channels: str = ""
+    telegram_api_id: str = ""
+    telegram_api_hash: str = ""
+    telegram_session_string: str = ""
+    twitter_bearer_token: str = ""
     worker_function_name: str = ""
 
     clay_webhook_secret: str = ""

@@ -43,7 +43,9 @@ class LeadSource(str, enum.Enum):
     LINKEDIN = "linkedin"
     MANUAL = "manual"
     REDDIT = "reddit"
+    REDDIT_RSS = "reddit_rss"
     TELEGRAM = "telegram"
+    TWITTER = "twitter"
     DIRECTORIES = "directories"
 
 

@@ -1,54 +1,46 @@
-"""B2C lead miner — consumers seeking travel (Reddit + Telegram + SerpAPI)."""
+"""B2C lead miner — buyer intent from Reddit RSS, Telegram groups, Twitter."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from app.services.lead_segment import apply_segment
-from app.services.miners.reddit import mine_reddit, reddit_setup_warning
-from app.services.miners.serp_b2c import mine_serp_b2c
-from app.services.miners.telegram import mine_telegram_legacy, telegram_setup_warning
+from app.services.miners.reddit_rss import mine_reddit_rss
+from app.services.miners.telegram_groups import mine_telegram_groups, telegram_groups_warning
+from app.services.miners.twitter import mine_twitter
 
 
 async def mine_b2c(cursor: int = 0, batch_size: int = 150) -> tuple[list[dict[str, Any]], int, bool, list[str]]:
-    """Aggregate B2C sources. Cursor tracks Reddit subreddit offset."""
+    """Aggregate primary B2C buyer-intent sources."""
     warnings: list[str] = []
-    reddit_leads, next_cursor, reddit_done = await mine_reddit(
-        limit_per_sub=25,
-        subreddit_offset=cursor,
-        max_subreddits=8,
-    )
-    telegram_leads = await mine_telegram_legacy()
-    serp_leads = await mine_serp_b2c(limit=40)
 
-    rw = reddit_setup_warning()
-    tw = telegram_setup_warning()
-    if rw:
-        warnings.append(rw)
+    rss_leads, rss_stats = await mine_reddit_rss(limit=80)
+    telegram_leads, next_cursor, complete, _tg_stats = await mine_telegram_groups(
+        cursor=cursor, batch_size=60
+    )
+    twitter_leads, _tw_stats, tw_warnings = await mine_twitter(limit=40)
+    warnings.extend(tw_warnings)
+
+    tw = telegram_groups_warning()
     if tw:
         warnings.append(tw)
-    if not serp_leads and not reddit_leads:
-        from app.config import get_settings
-
-        if not get_settings().serpapi_key:
-            warnings.append(
-                "Optional: add SERPAPI_KEY for Google travel-intent B2C leads without Reddit."
-            )
+    if rss_stats.get("feeds_fetched", 0) == 0:
+        warnings.append("Reddit RSS feeds returned no data this run.")
 
     combined: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    for raw in serp_leads + reddit_leads + telegram_leads:
+    for raw in rss_leads + telegram_leads + twitter_leads:
         lead = apply_segment(raw, default="b2c")
-        key = lead.get("external_id") or lead.get("source_detail") or lead.get("phone") or ""
+        lead.setdefault("lead_category", "consumer")
+        key = lead.get("external_id") or lead.get("post_url") or lead.get("phone") or ""
         if not key or key in seen:
             continue
-        if not (lead.get("phone") or lead.get("destination") or lead.get("notes") or lead.get("email")):
+        if not (lead.get("phone") or lead.get("notes") or lead.get("post_url")):
             continue
         seen.add(key)
         combined.append(lead)
         if len(combined) >= batch_size:
             break
 
-    complete = reddit_done and len(combined) < batch_size
     return combined[:batch_size], next_cursor, complete, warnings

@@ -58,10 +58,24 @@ class LeadEnrichmentService:
     async def score_lead(self, lead: dict[str, Any]) -> int:
         if self.client:
             try:
-                prompt = f"""Score this travel lead 0-100 for likelihood to book within 30 days.
-Return JSON: {{"score": int, "reason": str, "temperature": "hot|warm|cold"}}
+                text = lead.get("notes") or lead.get("name") or ""
+                has_phone = bool(lead.get("phone") and not lead.get("contact_synthetic"))
+                prompt = f"""You are qualifying leads for TravelAI — a flight booking service for UAE, India, UK, Australia, US markets.
 
-Lead: {json.dumps({k: lead.get(k) for k in ['phone','name','origin','destination','departure_date','market','source','employer','travel_intent'] if lead.get(k)})}"""
+A REAL CUSTOMER LEAD is someone who needs to buy a flight ticket, asks for price/agent recommendation, mentions route/destination, or has urgency.
+
+NOT a lead: travel agencies, deal channels, news, casual travel chat with no booking intent.
+
+Source: {lead.get('source')}
+Type: {lead.get('lead_segment', 'b2c')}
+Market: {lead.get('market')}
+Text: {text[:800]}
+Has phone: {str(has_phone).lower()}
+
+Score 1-10 (10 = route + date + price request now). Return JSON:
+{{"score": int_1_to_10, "is_real_customer": bool, "action": "call_now|whatsapp_now|contact_via_post|email_nurture|discard", "reason": str}}
+
+Map score to 0-100 as score * 10."""
                 response = await self.client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[{"role": "user", "content": prompt}],
@@ -69,7 +83,9 @@ Lead: {json.dumps({k: lead.get(k) for k in ['phone','name','origin','destination
                     temperature=0.2,
                 )
                 data = json.loads(response.choices[0].message.content or "{}")
-                return int(data.get("score", self._rule_score(lead)))
+                if data.get("action") == "discard" or not data.get("is_real_customer", True):
+                    return min(int(data.get("score", 2)) * 10, 30)
+                return min(int(data.get("score", self._rule_score(lead) // 10)) * 10, 100)
             except Exception:
                 pass
         return self._rule_score(lead)
