@@ -97,7 +97,7 @@ class LeadMiningService:
 
         by_source: dict[str, int] = {}
         pipeline = []
-        for lead in sorted(leads, key=lambda x: x.get("created_at", ""), reverse=True)[:50]:
+        for lead in sorted(leads, key=lambda x: x.get("created_at", ""), reverse=True)[:200]:
             display = enrich_lead_display(lead)
             src = lead.get("source", "unknown")
             by_source[src] = by_source.get(src, 0) + 1

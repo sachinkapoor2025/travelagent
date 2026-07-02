@@ -1259,7 +1259,7 @@
         </div>
         <div>
           <label class="field-label">Country / region</label>
-          <input id="miningMarketFilter" type="text" placeholder="worldwide" />
+          <input id="miningMarketFilter" type="text" placeholder="Leave empty for all countries" />
         </div>
         <div>
           <label class="field-label">Type</label>
@@ -1822,7 +1822,7 @@
       const time = p.completed_at || p.last_run_at || "—";
       return `<div class="mining-progress">
         <strong>${escapeHtml(p.message || "")}</strong><br/>
-        Total imported: ${p.total_imported ?? 0} · Last batch: ${p.last_batch_imported ?? 0} · ${complete}<br/>
+        Found: ${p.raw_found_last ?? "—"} · Imported: ${p.total_imported ?? 0} (last batch: ${p.last_batch_imported ?? 0}) · ${complete}<br/>
         <span class="meta">Updated ${escapeHtml(time)}</span>
       </div>`;
     }
@@ -1839,6 +1839,11 @@
       return `${dep}${ret}`;
     }
 
+    function marketFilterActive(value) {
+      const v = (value || "").trim().toLowerCase();
+      return v && !["worldwide", "all", "any", "global"].includes(v);
+    }
+
     function buildLeadQuery() {
       const params = new URLSearchParams();
       params.set("limit", "200");
@@ -1848,7 +1853,7 @@
       const segment = document.getElementById("leadSegmentFilter")?.value;
       const status = document.getElementById("leadStatusFilter")?.value;
       if (q) params.set("q", q);
-      if (market) params.set("market", market);
+      if (marketFilterActive(market)) params.set("market", market);
       if (source && !["b2b", "b2c"].includes(source)) params.set("source", source);
       if (segment) params.set("segment", segment);
       else if (source === "b2b" || source === "b2c") params.set("segment", source);
@@ -1866,9 +1871,10 @@
         if (source === "b2b" && row.lead_segment !== "b2b") return false;
         if (source === "b2c" && row.lead_segment !== "b2c") return false;
         if (source && !["b2b", "b2c"].includes(source) && row.source !== source) return false;
-        if (market) {
+        if (marketFilterActive(market)) {
+          const needle = market.toLowerCase();
           const blob = `${row.market || ""} ${row.location || ""}`.toLowerCase();
-          if (!blob.includes(market)) return false;
+          if (!blob.includes(needle)) return false;
         }
         if (!q) return true;
         const blob = [

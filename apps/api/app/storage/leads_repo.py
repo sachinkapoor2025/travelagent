@@ -60,6 +60,12 @@ def _dict_to_lead(data: dict[str, Any]) -> dict[str, Any]:
     return enrich_lead_display(lead)
 
 
+def _market_filter_active(market: Optional[str]) -> bool:
+    if not market:
+        return False
+    return market.strip().lower() not in {"", "worldwide", "all", "any", "global"}
+
+
 def _matches_query(lead: dict[str, Any], q: str) -> bool:
     needle = q.lower().strip()
     if not needle:
@@ -160,7 +166,7 @@ class LeadRepository:
         leads = [_dict_to_lead(i) for i in items]
         if status:
             leads = [l for l in leads if l["status"] == status]
-        if market:
+        if market and _market_filter_active(market):
             needle = market.lower()
             leads = [l for l in leads if needle in str(l.get("market", "")).lower() or needle in str(l.get("location", "")).lower()]
         if source:
