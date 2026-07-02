@@ -67,9 +67,10 @@ async def run_source_batch(
     progress = get_progress(source_id)
     start_cursor = cursor if cursor is not None else int(progress.get("cursor") or 0)
     segment = SEGMENT_FOR_SOURCE.get(source_id, "b2c")
+    warnings: list[str] = []
 
     try:
-        raw_leads, next_cursor, complete, total_markets = await _fetch_batch(
+        raw_leads, next_cursor, complete, total_markets, warnings = await _fetch_batch(
             source_id, start_cursor, batch_size
         )
     except Exception as exc:
@@ -82,7 +83,12 @@ async def run_source_batch(
     for raw in raw_leads:
         lead = apply_segment(raw, default=segment)
         lead = ensure_contact_phone(lead)
-        if not lead.get("phone") and not lead.get("destination"):
+        if not (
+            lead.get("phone")
+            or lead.get("destination")
+            or lead.get("notes")
+            or lead.get("email")
+        ):
             continue
         try:
             enriched = await lead_enrichment.enrich_fast(lead)
@@ -96,8 +102,13 @@ async def run_source_batch(
     from app.storage.dynamo import now_iso
 
     ts = now_iso()
-    if complete:
+    if complete and total_imported == 0 and segment == "b2c":
+        hint = "; ".join(warnings[:2]) if warnings else "Add Reddit secrets or message your Telegram bot to test."
+        message = f"No B2C leads found in this run. {hint}"
+    elif complete:
         message = f"All leads fetched — {total_imported} total imported · completed {ts}"
+    elif imported == 0 and warnings:
+        message = f"No new leads this batch. {warnings[0]}"
     else:
         remaining = max((total_markets or len(GLOBAL_MARKETS)) - next_cursor, 0)
         message = f"Batch done — {imported} imported ({total_imported} total). ~{remaining} markets remaining — fetch next batch."
@@ -133,6 +144,7 @@ async def run_source_batch(
         "completed_at": state.get("completed_at"),
         "segment": segment,
         "has_more": not complete,
+        "warnings": warnings,
     }
     try:
         record_run(source_id, stats)
@@ -146,24 +158,30 @@ async def _fetch_batch(
     source_id: str,
     cursor: int,
     batch_size: int,
-) -> tuple[list[dict[str, Any]], int, bool, int]:
+) -> tuple[list[dict[str, Any]], int, bool, int, list[str]]:
     if source_id == "b2b":
         leads, next_cursor, complete, total = await mine_b2b(cursor=cursor, batch_size=batch_size)
-        return leads, next_cursor, complete, total
+        return leads, next_cursor, complete, total, []
     if source_id == "b2c":
-        leads, next_cursor, complete = await mine_b2c(cursor=cursor, batch_size=batch_size)
-        return leads, next_cursor, complete, 0
+        leads, next_cursor, complete, warnings = await mine_b2c(cursor=cursor, batch_size=batch_size)
+        return leads, next_cursor, complete, 0, warnings
     if source_id == "directories":
         leads, next_cursor, complete, total = await mine_directories_batch(cursor=cursor, import_limit=batch_size)
-        return [apply_segment(l, default="b2b") for l in leads], next_cursor, complete, total
+        return [apply_segment(l, default="b2b") for l in leads], next_cursor, complete, total, []
     if source_id == "reddit":
+        from app.services.miners.reddit import reddit_setup_warning
+
         leads, next_cursor, complete = await mine_reddit(limit_per_sub=25, subreddit_offset=cursor, max_subreddits=10)
-        return [apply_segment(l, default="b2c") for l in leads[:batch_size]], next_cursor, complete, 0
+        w = [x for x in [reddit_setup_warning()] if x]
+        return [apply_segment(l, default="b2c") for l in leads[:batch_size]], next_cursor, complete, 0, w
     if source_id == "telegram":
+        from app.services.miners.telegram import telegram_setup_warning
+
         raw = await mine_telegram()
+        w = [x for x in [telegram_setup_warning()] if x]
         tagged = [apply_segment(l, default="b2c") for l in raw[:batch_size]]
-        return tagged, cursor, True, 0
-    return [], cursor, True, 0
+        return tagged, cursor, True, 0, w
+    return [], cursor, True, 0, []
 
 
 async def run_source(source_id: str, force: bool = False, fast: bool = False) -> dict[str, Any]:

@@ -76,6 +76,10 @@ Parameters:
     Type: String
     Default: ""
     NoEcho: true
+  TelegramChannels:
+    Type: String
+    Default: ""
+    Description: Comma-separated Telegram channel usernames to monitor (without @)
   SerpApiKey:
     Type: String
     Default: ""
@@ -129,6 +133,7 @@ Globals:
         REDDIT_CLIENT_ID: !Ref RedditClientId
         REDDIT_CLIENT_SECRET: !Ref RedditClientSecret
         TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
+        TELEGRAM_CHANNELS: !Ref TelegramChannels
         SERPAPI_KEY: !Ref SerpApiKey
         WORKER_FUNCTION_NAME: !Sub travel-ai-worker-${Environment}
 
