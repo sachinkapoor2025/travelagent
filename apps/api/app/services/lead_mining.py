@@ -125,6 +125,7 @@ class LeadMiningService:
                     "lead_segment": display.get("lead_segment"),
                     "segment_label": display.get("segment_label"),
                     "contact_synthetic": display.get("contact_synthetic"),
+                    "call_ready": display.get("call_ready"),
                     "status": display.get("status"),
                     "notes": display.get("notes"),
                     "created_at": display.get("created_at"),

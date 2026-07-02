@@ -1851,7 +1851,8 @@
     }
 
     function displayLeadPhone(lead) {
-      if (lead.contact_synthetic) return "Deal post";
+      if (lead.call_ready === false) return "Deal (not callable)";
+      if (lead.contact_synthetic) return "Platform contact";
       return lead.phone || "—";
     }
 

@@ -7,7 +7,7 @@ from typing import Any
 from app.services.lead_segment import apply_segment
 from app.services.miners.reddit import mine_reddit, reddit_setup_warning
 from app.services.miners.serp_b2c import mine_serp_b2c
-from app.services.miners.telegram import mine_telegram, telegram_setup_warning
+from app.services.miners.telegram import mine_telegram_legacy, telegram_setup_warning
 
 
 async def mine_b2c(cursor: int = 0, batch_size: int = 150) -> tuple[list[dict[str, Any]], int, bool, list[str]]:
@@ -18,7 +18,7 @@ async def mine_b2c(cursor: int = 0, batch_size: int = 150) -> tuple[list[dict[st
         subreddit_offset=cursor,
         max_subreddits=8,
     )
-    telegram_leads = await mine_telegram()
+    telegram_leads = await mine_telegram_legacy()
     serp_leads = await mine_serp_b2c(limit=40)
 
     rw = reddit_setup_warning()

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from app.services.miners.telegram_intent import stable_digest
+
 B2B_SOURCES = {"directories", "clay", "apollo", "linkedin", "partner"}
 B2C_SOURCES = {"reddit", "telegram", "website", "whatsapp", "voice_inbound", "voice_outbound", "google_ads", "meta_ads", "referral", "abandoned_search", "manual"}
 
@@ -42,7 +44,7 @@ def ensure_contact_phone(raw: dict[str, Any]) -> dict[str, Any]:
     external = out.get("external_id") or out.get("source_detail") or out.get("email")
     if not external:
         return out
-    digest = abs(hash(str(external))) % 10_000_000_000
+    digest = int(stable_digest(str(external), digits=10))
     out["phone"] = f"+888{digest:010d}"[:16]
     out["contact_synthetic"] = True
     return out

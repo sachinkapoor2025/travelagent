@@ -20,13 +20,11 @@ from app.services.miners.b2c import mine_b2c
 from app.services.miners.directories import mine_directories_batch
 from app.services.miners.global_markets import GLOBAL_MARKETS
 from app.services.miners.reddit import mine_reddit
-from app.services.miners.telegram import mine_telegram
 
 logger = logging.getLogger(__name__)
 
 MINERS = {
     "reddit": mine_reddit,
-    "telegram": mine_telegram,
     "directories": None,
     "b2b": mine_b2b,
     "b2c": mine_b2c,
@@ -39,6 +37,12 @@ SEGMENT_FOR_SOURCE = {
     "telegram": "b2c",
     "b2c": "b2c",
 }
+
+
+def _telegram_channel_count() -> int:
+    from app.services.miners.telegram import _channel_list
+
+    return len(_channel_list())
 
 
 async def run_source_batch(
@@ -56,7 +60,7 @@ async def run_source_batch(
             "skipped": True,
             "reason": "Webhook-only source — configure Clay/Apollo to POST to /lead-mining/webhook/" + source_id,
         }
-    if source_id not in MINERS and source_id != "directories":
+    if source_id not in MINERS and source_id not in {"directories", "telegram"}:
         return {"error": f"Unknown source {source_id}"}
     if not force and not sources.get(source_id, {}).get("enabled", False):
         return {"skipped": True, "reason": "disabled"}
@@ -83,6 +87,8 @@ async def run_source_batch(
     for raw in raw_leads:
         lead = apply_segment(raw, default=segment)
         lead = ensure_contact_phone(lead)
+        if lead.get("call_ready") is False:
+            continue
         if not (
             lead.get("phone")
             or lead.get("destination")
@@ -175,12 +181,15 @@ async def _fetch_batch(
         w = [x for x in [reddit_setup_warning()] if x]
         return [apply_segment(l, default="b2c") for l in leads[:batch_size]], next_cursor, complete, 0, w
     if source_id == "telegram":
-        from app.services.miners.telegram import telegram_setup_warning
+        from app.services.miners.telegram import mine_telegram, telegram_setup_warning
 
-        raw = await mine_telegram()
+        raw, next_cursor, complete, tg_stats = await mine_telegram(cursor=cursor, batch_size=batch_size)
+        skipped = tg_stats.get("skipped_deals", 0)
         w = [x for x in [telegram_setup_warning()] if x]
+        if skipped and not w:
+            w = [f"Skipped {skipped} promotional deal posts (not callable customers)."]
         tagged = [apply_segment(l, default="b2c") for l in raw[:batch_size]]
-        return tagged, cursor, True, 0, w
+        return tagged, next_cursor, complete, len(_telegram_channel_count()), w
     return [], cursor, True, 0, []
 
 

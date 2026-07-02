@@ -24,6 +24,7 @@ _EXTRA_FIELDS = (
     "preferred_language",
     "lead_segment",
     "contact_synthetic",
+    "call_ready",
     "external_id",
 )
 
